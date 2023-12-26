@@ -1,4 +1,4 @@
-import "~/styles/globals.css";
+import "~/styles/global.css";
 import { type Metadata } from "next";
 
 import { cookies } from "next/headers";
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body
         className={cn(
-          "bg-background min-h-screen font-sans antialiased",
+          "min-h-screen bg-background font-sans antialiased",
           fontSans.variable,
         )}
       >
