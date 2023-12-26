@@ -6,8 +6,10 @@ import {
   mysqlTableCreator,
   primaryKey,
   text,
+  date,
   timestamp,
   varchar,
+  double,
 } from "drizzle-orm/mysql-core";
 import { type AdapterAccount } from "next-auth/adapters";
 
@@ -33,7 +35,7 @@ export const posts = mysqlTable(
   (example) => ({
     createdByIdIdx: index("createdById_idx").on(example.createdById),
     nameIndex: index("name_idx").on(example.name),
-  })
+  }),
 );
 
 export const users = mysqlTable("user", {
@@ -50,6 +52,8 @@ export const users = mysqlTable("user", {
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
+  movie_match: many(movie_match),
+  user_movie_elo: many(user_movie_elo),
 }));
 
 export const accounts = mysqlTable(
@@ -72,7 +76,7 @@ export const accounts = mysqlTable(
   (account) => ({
     compoundKey: primaryKey(account.provider, account.providerAccountId),
     userIdIdx: index("userId_idx").on(account.userId),
-  })
+  }),
 );
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -90,7 +94,7 @@ export const sessions = mysqlTable(
   },
   (session) => ({
     userIdIdx: index("userId_idx").on(session.userId),
-  })
+  }),
 );
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -106,5 +110,90 @@ export const verificationTokens = mysqlTable(
   },
   (vt) => ({
     compoundKey: primaryKey(vt.identifier, vt.token),
-  })
+  }),
 );
+
+export const movies = mysqlTable("movie", {
+  id: varchar("id", { length: 255 }).notNull().primaryKey(),
+  title: text("title"),
+  budget: text("budget"),
+  release_date: date("date"),
+});
+export const moviesRelations = relations(movies, ({ many }) => ({
+  movie_match: many(movie_match),
+  user_movie_elo: many(user_movie_elo),
+  movie_elo: many(movie_elo),
+  moviesToGenre: many(moviesToGenre),
+}));
+export const genre = mysqlTable("genre", {
+  id: varchar("id", { length: 255 }).notNull().primaryKey(),
+  name: text("name"),
+});
+export const genreRelations = relations(genre, ({ many }) => ({
+  moviesToGenres: many(moviesToGenre),
+}));
+export const moviesToGenre = mysqlTable("movies_to_genre", {
+  movie_id: varchar("movie_id", { length: 255 }),
+  genre_id: varchar("genre_id", { length: 255 }),
+});
+export const moviesToGenreRelations = relations(moviesToGenre, ({ one }) => ({
+  movies: one(movies, {
+    fields: [moviesToGenre.movie_id],
+    references: [movies.id],
+  }),
+  genre: one(genre, {
+    fields: [moviesToGenre.genre_id],
+    references: [genre.id],
+  }),
+}));
+export const movie_match = mysqlTable("movie_match", {
+  user: varchar("id", { length: 255 }),
+  movie_1_id: varchar("movie_1_id", { length: 255 }),
+  movie_2_id: varchar("movie_2_id", { length: 255 }),
+  result: int("int"),
+});
+export const movie_matchRelations = relations(movie_match, ({ one }) => ({
+  user: one(users, {
+    fields: [movie_match.user],
+    references: [users.id],
+  }),
+  movie_1: one(movies, {
+    fields: [movie_match.movie_1_id],
+    references: [movies.id],
+  }),
+  movie_2: one(movies, {
+    fields: [movie_match.movie_2_id],
+    references: [movies.id],
+  }),
+}));
+export const user_movie_elo = mysqlTable("user_movie_elo", {
+  user: varchar("id", { length: 255 }),
+  movie_id: varchar("movie_id", { length: 255 }),
+  elo: double("double"),
+  createdAt: timestamp("created_at")
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+export const user_movie_eloRelations = relations(user_movie_elo, ({ one }) => ({
+  user: one(users, {
+    fields: [user_movie_elo.user],
+    references: [users.id],
+  }),
+  movie: one(movies, {
+    fields: [user_movie_elo.movie_id],
+    references: [movies.id],
+  }),
+}));
+export const movie_elo = mysqlTable("movie_elo", {
+  movie_id: varchar("movie_id", { length: 255 }),
+  elo: double("double"),
+  createdAt: timestamp("created_at")
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+export const movie_eloRelations = relations(movie_elo, ({ one }) => ({
+  movie: one(movies, {
+    fields: [movie_elo.movie_id],
+    references: [movies.id],
+  }),
+}));
