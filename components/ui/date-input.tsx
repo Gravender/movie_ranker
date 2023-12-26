@@ -1,3 +1,4 @@
+"use client";
 import { CalendarIcon } from "lucide-react";
 import React, { useEffect, useRef } from "react";
 import { Button } from "./button";
@@ -207,7 +208,7 @@ const DateInput = React.forwardRef<HTMLDivElement, DateInputProps>(
     return (
       <Popover>
         <div
-          className="flex items-center justify-between rounded-lg border px-2 py-2 text-sm"
+          className="flex items-center justify-between rounded-lg border px-1 text-sm"
           ref={ref}
         >
           <div>
