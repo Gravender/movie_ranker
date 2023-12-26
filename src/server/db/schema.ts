@@ -127,7 +127,7 @@ export const moviesRelations = relations(movies, ({ many }) => ({
 }));
 export const genre = mysqlTable("genre", {
   id: varchar("id", { length: 255 }).notNull().primaryKey(),
-  name: text("name"),
+  name: text("name").notNull(),
 });
 export const genreRelations = relations(genre, ({ many }) => ({
   moviesToGenres: many(moviesToGenre),

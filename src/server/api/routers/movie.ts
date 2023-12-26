@@ -73,13 +73,27 @@ export const movieRouter = createTRPCRouter({
       return ctx.db.query.movies.findFirst({
         where: (movies, { eq }) => eq(movies.id, input.id),
         with: {
-          moviesToGenre: true,
+          moviesToGenre: {
+            with: {
+              genre: true,
+            },
+          },
         },
       });
     }),
   getMovies: publicProcedure.query(({ ctx }) => {
     return ctx.db.query.movies.findMany({
       orderBy: (movies, { desc }) => [desc(movies.release_date)],
+      with: {
+        moviesToGenre: {
+          with: {
+            genre: true,
+          },
+        },
+      },
     });
+  }),
+  getGenres: publicProcedure.query(({ ctx }) => {
+    return ctx.db.query.genre.findMany({});
   }),
 });
