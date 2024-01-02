@@ -118,6 +118,7 @@ export const movies = mysqlTable("movie", {
   title: text("title"),
   budget: text("budget"),
   release_date: date("date"),
+  poster_src: text("poster_src"),
 });
 export const moviesRelations = relations(movies, ({ many }) => ({
   movie_match: many(movie_match),

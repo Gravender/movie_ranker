@@ -7,7 +7,7 @@ await import("./src/env.js");
 /** @type {import("next").NextConfig} */
 const config = {
   images: {
-    domains: ["fastly.picsum.photos"],
+    domains: ["fastly.picsum.photos", "m.media-amazon.com"],
   },
 };
 
