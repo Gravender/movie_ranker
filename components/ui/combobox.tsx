@@ -103,8 +103,14 @@ export const MultiComboBox = React.forwardRef<
           {values.length > 0
             ? values
                 .map((value) =>
-                  options.find((option) => option.value === value)
-                    ? options.find((option) => option.value === value)?.label
+                  options.find(
+                    (option) =>
+                      option.value.toLowerCase() === value.toLowerCase(),
+                  )
+                    ? options.find(
+                        (option) =>
+                          option.value.toLowerCase() === value.toLowerCase(),
+                      )?.label
                     : value,
                 )
                 .join(", ")
@@ -152,7 +158,11 @@ export const MultiComboBox = React.forwardRef<
               ...options,
               ...values
                 .filter(
-                  (value) => !options.find((option) => value === option.value),
+                  (value) =>
+                    !options.find(
+                      (option) =>
+                        value.toLowerCase() === option.value.toLowerCase(),
+                    ),
                 )
                 .map((value) => {
                   return { value, label: value };
@@ -179,7 +189,10 @@ export const MultiComboBox = React.forwardRef<
                 <Check
                   className={cn(
                     "mr-2 h-4 w-4",
-                    values.find((value) => value === option.value)
+                    values.find(
+                      (value) =>
+                        value.toLowerCase() === option.value.toLowerCase(),
+                    )
                       ? "opacity-100"
                       : "opacity-0",
                   )}
