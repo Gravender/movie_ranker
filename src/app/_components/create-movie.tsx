@@ -17,6 +17,8 @@ import { DateInput } from "@/components/ui/date-input";
 import { MultiComboBox } from "@/components/ui/combobox";
 import { useRouter } from "next/navigation";
 import { api } from "~/trpc/react";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 const formSchema = z.object({
   title: z.string().min(2),
@@ -34,7 +36,7 @@ type CreateMovieProps = {
 };
 
 export const CreateMovie = ({ genres }: CreateMovieProps) => {
-  const router = useRouter();
+  const { toast } = useToast();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -45,8 +47,26 @@ export const CreateMovie = ({ genres }: CreateMovieProps) => {
     },
   });
   const createMovie = api.movie.create.useMutation({
-    onSuccess: () => {
-      router.refresh();
+    onSuccess: (movie) => {
+      if (movie === null) {
+        toast({
+          title: "Failed",
+          description: "Movie already in database",
+        });
+      } else {
+        toast({
+          title: movie.title ?? "Movie",
+          description:
+            "Added successfully with" + movie?.poster_src !== null
+              ? "poster added"
+              : "",
+          action: (
+            <ToastAction altText="Add Another" onClick={() => form.reset()}>
+              Add Another
+            </ToastAction>
+          ),
+        });
+      }
     },
   });
 
