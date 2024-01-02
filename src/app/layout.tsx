@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/site-header";
 import { TailwindIndicator } from "@/components/tailwind-indicator";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TRPCReactProvider } from "~/trpc/react";
+import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
   title: {
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               </TRPCReactProvider>
             </div>
           </div>
+          <Toaster />
           <TailwindIndicator />
         </ThemeProvider>
       </body>
