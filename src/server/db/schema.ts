@@ -54,6 +54,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   movie_match: many(movie_match),
   user_movie_elo: many(user_movie_elo),
+  genre_movie_user_elo: many(genre_movie_user_elo),
 }));
 
 export const accounts = mysqlTable(
@@ -125,6 +126,8 @@ export const moviesRelations = relations(movies, ({ many }) => ({
   user_movie_elo: many(user_movie_elo),
   movie_elo: many(movie_elo),
   moviesToGenre: many(moviesToGenre),
+  genre_movie_elo: many(genre_movie_elo),
+  genre_movie_user_elo: many(genre_movie_user_elo),
 }));
 export const genre = mysqlTable("genre", {
   id: varchar("id", { length: 255 }).notNull().primaryKey(),
@@ -132,6 +135,7 @@ export const genre = mysqlTable("genre", {
 });
 export const genreRelations = relations(genre, ({ many }) => ({
   moviesToGenres: many(moviesToGenre),
+  genre_movie_elo: many(genre_movie_elo),
 }));
 export const moviesToGenre = mysqlTable("movies_to_genre", {
   movie_id: varchar("movie_id", { length: 255 }),
@@ -148,14 +152,17 @@ export const moviesToGenreRelations = relations(moviesToGenre, ({ one }) => ({
   }),
 }));
 export const movie_match = mysqlTable("movie_match", {
-  user: varchar("id", { length: 255 }),
+  user_id: varchar("user_id", { length: 255 }),
   movie_1_id: varchar("movie_1_id", { length: 255 }),
   movie_2_id: varchar("movie_2_id", { length: 255 }),
   result: int("int"),
+  createdAt: timestamp("created_at")
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
 });
 export const movie_matchRelations = relations(movie_match, ({ one }) => ({
   user: one(users, {
-    fields: [movie_match.user],
+    fields: [movie_match.user_id],
     references: [users.id],
   }),
   movie_1: one(movies, {
@@ -168,7 +175,7 @@ export const movie_matchRelations = relations(movie_match, ({ one }) => ({
   }),
 }));
 export const user_movie_elo = mysqlTable("user_movie_elo", {
-  user: varchar("id", { length: 255 }),
+  user_id: varchar("user_id", { length: 255 }),
   movie_id: varchar("movie_id", { length: 255 }),
   elo: double("double"),
   createdAt: timestamp("created_at")
@@ -177,7 +184,7 @@ export const user_movie_elo = mysqlTable("user_movie_elo", {
 });
 export const user_movie_eloRelations = relations(user_movie_elo, ({ one }) => ({
   user: one(users, {
-    fields: [user_movie_elo.user],
+    fields: [user_movie_elo.user_id],
     references: [users.id],
   }),
   movie: one(movies, {
@@ -198,3 +205,54 @@ export const movie_eloRelations = relations(movie_elo, ({ one }) => ({
     references: [movies.id],
   }),
 }));
+
+export const genre_movie_elo = mysqlTable("genre_movie_elo", {
+  genre_id: varchar("genre_id", { length: 255 }),
+  movie_id: varchar("movie_id", { length: 255 }),
+  elo: double("double"),
+  createdAt: timestamp("created_at")
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+
+export const genre_movie_eloRelations = relations(
+  genre_movie_elo,
+  ({ one }) => ({
+    genre: one(genre, {
+      fields: [genre_movie_elo.genre_id],
+      references: [genre.id],
+    }),
+    movie: one(movies, {
+      fields: [genre_movie_elo.movie_id],
+      references: [movies.id],
+    }),
+  }),
+);
+
+export const genre_movie_user_elo = mysqlTable("genre_movie_user_elo", {
+  user_id: varchar("user_id", { length: 255 }),
+  genre_id: varchar("genre_id", { length: 255 }),
+  movie_id: varchar("movie_id", { length: 255 }),
+  elo: double("double"),
+  createdAt: timestamp("created_at")
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+
+export const genre_movie_user_eloRelations = relations(
+  genre_movie_user_elo,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [genre_movie_user_elo.user_id],
+      references: [users.id],
+    }),
+    genre: one(genre, {
+      fields: [genre_movie_user_elo.genre_id],
+      references: [genre.id],
+    }),
+    movie: one(movies, {
+      fields: [genre_movie_user_elo.movie_id],
+      references: [movies.id],
+    }),
+  }),
+);
