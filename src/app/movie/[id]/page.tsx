@@ -2,6 +2,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -25,23 +26,25 @@ export default async function NotFound({ params }: Props) {
   console.log(movie);
   return (
     <div className="flex h-full w-full items-center justify-center">
-      <Card className="mt-4 h-full">
+      <Card className="mt-4 h-[50rem] w-96">
         <CardHeader className="h-32">
           <CardTitle>{movie.title}</CardTitle>
           <CardDescription>
             {movie.release_date?.toLocaleString()}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center">
-          {movie.poster_src !== null ? (
-            <Image src={movie.poster_src} alt={""} width={260} height={390} />
+        <div className="relative h-[36rem] w-full">
+          {movie.poster_src !== null && movie.poster_src !== "N/A" ? (
+            <Image src={movie.poster_src} alt={movie.title ?? ""} fill />
           ) : null}
+        </div>
+        <CardFooter>
           <div className="w-full items-start">
             <span className="font-semibold">Genre:</span>
             {" " +
               movie.moviesToGenre.map((genre) => genre.genre?.name).join(", ")}
           </div>
-        </CardContent>
+        </CardFooter>
       </Card>
     </div>
   );
