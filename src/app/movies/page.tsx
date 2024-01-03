@@ -83,22 +83,21 @@ const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
               className="md:basis-1/3 lg:basis-1/4 xl:basis-1/5 2xl:basis-1/6"
             >
               <Card
-                className="h-96"
+                className="h-96 w-full"
                 onClick={() => router.push(`/movie/${movie.id}`)}
               >
-                <div className="mt-2 flex flex-col items-center justify-center">
+                <div className="relative h-4/5 w-full">
                   {movie.poster_src !== null && movie.poster_src !== "N/A" ? (
                     <Image
                       src={movie.poster_src}
                       alt={movie.title ?? ""}
-                      width={180}
-                      height={270}
+                      fill
                     />
                   ) : null}
                 </div>
                 <CardFooter>
                   <div className="flex flex-grow flex-col items-start">
-                    <h2 className="py-1 text-left font-medium">
+                    <h2 className="pt-1 text-left font-medium">
                       {movie.title}
                     </h2>
                     {movie.release_date ? (
