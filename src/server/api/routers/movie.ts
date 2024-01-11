@@ -17,7 +17,8 @@ import {
   genre_movie_elo,
   genre_movie_user_elo,
 } from "~/server/db/schema";
-import { compareAsc } from "date-fns";
+import { compareAsc, compareDesc } from "date-fns";
+import { eq } from "drizzle-orm";
 
 export const movieRouter = createTRPCRouter({
   create: protectedProcedure
@@ -184,10 +185,91 @@ export const movieRouter = createTRPCRouter({
       const a_elo = a.movie_elo[0]?.elo;
       const b_elo = b.movie_elo[0]?.elo;
       if (typeof a_elo === "number" && typeof b_elo === "number")
-        return a_elo - b_elo;
+        return b_elo - a_elo;
+      if (typeof a_elo === "number") return -1;
+      if (typeof b_elo === "number") return 1;
       return a.movie_elo.length - b.movie_elo.length;
     });
-    return movies.map((movie) => ({ ...movie, movie_elo: movie.movie_elo[0] }));
+    return movies.map((movie) => ({
+      ...movie,
+      movie_elo: movie.movie_elo[0]?.elo,
+    }));
+  }),
+  getMoviesGroupedGenreElo: publicProcedure.query(async ({ ctx }) => {
+    const genres = await ctx.db.query.genre.findMany({
+      orderBy: (genre, { asc }) => [asc(genre.name)],
+      with: {
+        moviesToGenres: {
+          with: {
+            movies: {
+              with: {
+                moviesToGenre: {
+                  with: {
+                    genre: true,
+                  },
+                },
+                genre_movie_elo: {
+                  orderBy: (genre_movie_user_elo, { desc }) => [
+                    desc(genre_movie_user_elo.createdAt),
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    return genres.map((genre) => {
+      const uniqueMovies = new Set();
+      function notEmpty<TValue>(
+        value: TValue | null | undefined,
+      ): value is TValue {
+        return value !== null && value !== undefined;
+      }
+      const movies = genre.moviesToGenres
+        .filter((movie) => movie.movies !== null)
+        .map((moviesToGenre) => {
+          const movie = moviesToGenre.movies;
+          const elo =
+            movie.genre_movie_elo !== null && movie.genre_movie_elo.length > 0
+              ? movie.genre_movie_elo.find(
+                  (elo) => elo !== null && elo.genre_id === genre.id,
+                )?.elo
+              : undefined;
+          const movieId = movie.id; // Get the movie ID
+
+          // Check if the movie ID is already in the Set
+          if (!uniqueMovies.has(movieId)) {
+            // If not, add it to the Set and return the movie data
+            uniqueMovies.add(movieId);
+            return {
+              id: movie.id,
+              title: movie.title,
+              release_date: movie.release_date,
+              budget: movie.budget,
+              poster_src: movie.poster_src,
+              moviesToGenre: movie.moviesToGenre,
+              movie_elo: elo,
+            };
+          }
+          return null; // Return null for duplicate movies
+        })
+        .filter(notEmpty);
+      movies.sort((a, b) => {
+        if (typeof a.movie_elo === "number" && typeof b.movie_elo === "number")
+          return b.movie_elo - a.movie_elo;
+        if (typeof a.movie_elo === "number") return -1;
+        if (typeof b.movie_elo === "number") return 1;
+        if (a.release_date !== null && b.release_date !== null)
+          return compareDesc(a.release_date, b.release_date);
+        return a.moviesToGenre.length - b.moviesToGenre.length;
+      });
+      return {
+        id: genre.id,
+        name: genre.name,
+        movies: movies,
+      };
+    });
   }),
   getMoviesGroupedGenre: publicProcedure.query(({ ctx }) => {
     return ctx.db.query.genre.findMany({

@@ -7,39 +7,22 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from "@/components/ui/carousel";
-import { compareDesc, format } from "date-fns";
+import { format } from "date-fns";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { api } from "~/trpc/react";
 
 export default function Home() {
-  const { data: movies } = api.movie.getMovies.useQuery();
-  const { data: genres } = api.movie.getMoviesGroupedGenre.useQuery();
+  const { data: movies } = api.movie.getMoviesByElo.useQuery();
+  const { data: genres } = api.movie.getMoviesGroupedGenreElo.useQuery();
   return (
     <div className="mt-2 flex h-full w-full flex-col items-center justify-center gap-2">
       {movies ? <MovieCarousel movies={movies} title={"All Movies"} /> : null}
       {genres
         ? genres.map((genre) => {
-            const genre_movies = genre.moviesToGenres.flatMap(
-              (moviesToGenre) => {
-                if (moviesToGenre.movies) {
-                  return [moviesToGenre.movies];
-                }
-                return [];
-              },
-            );
-            if (genre_movies.length >= 5)
-              return (
-                <MovieCarousel
-                  movies={genre_movies.sort((a, b) => {
-                    if (a.release_date !== null && b.release_date !== null)
-                      return compareDesc(a.release_date, b.release_date);
-                    return a.moviesToGenre.length - b.moviesToGenre.length;
-                  })}
-                  title={genre.name}
-                />
-              );
+            if (genre.movies.length > 5)
+              return <MovieCarousel movies={genre.movies} title={genre.name} />;
             return null;
           })
         : null}
@@ -53,6 +36,7 @@ type movieCarouselProps = {
     budget: string | null;
     release_date: Date | null;
     poster_src: string | null;
+    movie_elo: number | undefined;
     moviesToGenre: {
       movie_id: string | null;
       genre_id: string | null;
@@ -79,7 +63,7 @@ const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
         <CarouselContent>
           {movies.map((movie) => (
             <CarouselItem
-              key={movie.id}
+              key={title + movie.id}
               className="md:basis-1/3 lg:basis-1/4 xl:basis-1/5 2xl:basis-1/6"
             >
               <Card
@@ -95,16 +79,16 @@ const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
                     />
                   ) : null}
                 </div>
-                <CardFooter>
-                  <div className="flex flex-grow flex-col items-start">
-                    <h2 className="pt-1 text-left font-medium">
+                <CardFooter className="px-2">
+                  <div className="flex w-full flex-grow flex-col items-start">
+                    <h3 className="text-small flex w-full truncate pt-1 text-left font-medium">
                       {movie.title}
-                    </h2>
-                    {movie.release_date ? (
-                      <span className="flex items-center ">
-                        {format(movie.release_date, "LLL dd, y")}
+                    </h3>
+                    {movie.movie_elo !== undefined && (
+                      <span className="text-sm">
+                        {" Elo: " + movie.movie_elo}
                       </span>
-                    ) : null}
+                    )}
                   </div>
                 </CardFooter>
               </Card>
