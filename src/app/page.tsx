@@ -1,82 +1,119 @@
-import Link from "next/link";
+"use client";
+import { Card, CardFooter, CardTitle } from "@/components/ui/card";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from "@/components/ui/carousel";
+import { compareDesc, format } from "date-fns";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 
-import { CreatePost } from "~/app/_components/create-post";
-import { getServerAuthSession } from "~/server/auth";
-import { api } from "~/trpc/server";
+import { api } from "~/trpc/react";
 
-export default async function Home() {
-  const hello = await api.post.hello.query({ text: "from tRPC" });
-  const session = await getServerAuthSession();
-
+export default function Home() {
+  const { data: movies } = api.movie.getMovies.useQuery();
+  const { data: genres } = api.movie.getMoviesGroupedGenre.useQuery();
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-      <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16 ">
-        <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-          Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-        </h1>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-          <Link
-            className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-            href="https://create.t3.gg/en/usage/first-steps"
-            target="_blank"
-          >
-            <h3 className="text-2xl font-bold">First Steps →</h3>
-            <div className="text-lg">
-              Just the basics - Everything you need to know to set up your
-              database and authentication.
-            </div>
-          </Link>
-          <Link
-            className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-            href="https://create.t3.gg/en/introduction"
-            target="_blank"
-          >
-            <h3 className="text-2xl font-bold">Documentation →</h3>
-            <div className="text-lg">
-              Learn more about Create T3 App, the libraries it uses, and how to
-              deploy it.
-            </div>
-          </Link>
-        </div>
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-2xl text-white">
-            {hello ? hello.greeting : "Loading tRPC query..."}
-          </p>
-
-          <div className="flex flex-col items-center justify-center gap-4">
-            <p className="text-center text-2xl text-white">
-              {session && <span>Logged in as {session.user?.name}</span>}
-            </p>
-            <Link
-              href={session ? "/api/auth/signout" : "/api/auth/signin"}
-              className="rounded-full bg-white/10 px-10 py-3 font-semibold no-underline transition hover:bg-white/20"
-            >
-              {session ? "Sign out" : "Sign in"}
-            </Link>
-          </div>
-        </div>
-
-        <CrudShowcase />
-      </div>
-    </main>
-  );
-}
-
-async function CrudShowcase() {
-  const session = await getServerAuthSession();
-  if (!session?.user) return null;
-
-  const latestPost = await api.post.getLatest.query();
-
-  return (
-    <div className="w-full max-w-xs">
-      {latestPost ? (
-        <p className="truncate">Your most recent post: {latestPost.name}</p>
-      ) : (
-        <p>You have no posts yet.</p>
-      )}
-
-      <CreatePost />
+    <div className="mt-2 flex h-full w-full flex-col items-center justify-center gap-2">
+      {movies ? <MovieCarousel movies={movies} title={"All Movies"} /> : null}
+      {genres
+        ? genres.map((genre) => {
+            const genre_movies = genre.moviesToGenres.flatMap(
+              (moviesToGenre) => {
+                if (moviesToGenre.movies) {
+                  return [moviesToGenre.movies];
+                }
+                return [];
+              },
+            );
+            if (genre_movies.length >= 5)
+              return (
+                <MovieCarousel
+                  movies={genre_movies.sort((a, b) => {
+                    if (a.release_date !== null && b.release_date !== null)
+                      return compareDesc(a.release_date, b.release_date);
+                    return a.moviesToGenre.length - b.moviesToGenre.length;
+                  })}
+                  title={genre.name}
+                />
+              );
+            return null;
+          })
+        : null}
     </div>
   );
 }
+type movieCarouselProps = {
+  movies: {
+    id: string;
+    title: string | null;
+    budget: string | null;
+    release_date: Date | null;
+    poster_src: string | null;
+    moviesToGenre: {
+      movie_id: string | null;
+      genre_id: string | null;
+      genre: {
+        name: string;
+        id: string;
+      } | null;
+    }[];
+  }[];
+  title: string;
+};
+const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
+  const router = useRouter();
+  return (
+    <div className="flex w-full flex-col items-center justify-center">
+      <CardTitle className="w-full pl-12 text-left">{`${title}:`}</CardTitle>
+      <Carousel
+        opts={{
+          align: "start",
+          loop: true,
+        }}
+        className="mt-4 w-full lg:max-w-5xl 2xl:max-w-7xl"
+      >
+        <CarouselContent>
+          {movies.map((movie) => (
+            <CarouselItem
+              key={movie.id}
+              className="md:basis-1/3 lg:basis-1/4 xl:basis-1/5 2xl:basis-1/6"
+            >
+              <Card
+                className="h-96 w-full"
+                onClick={() => router.push(`/movie/${movie.id}`)}
+              >
+                <div className="relative h-4/5 w-full">
+                  {movie.poster_src !== null && movie.poster_src !== "N/A" ? (
+                    <Image
+                      src={movie.poster_src}
+                      alt={movie.title ?? ""}
+                      fill
+                    />
+                  ) : null}
+                </div>
+                <CardFooter>
+                  <div className="flex flex-grow flex-col items-start">
+                    <h2 className="pt-1 text-left font-medium">
+                      {movie.title}
+                    </h2>
+                    {movie.release_date ? (
+                      <span className="flex items-center ">
+                        {format(movie.release_date, "LLL dd, y")}
+                      </span>
+                    ) : null}
+                  </div>
+                </CardFooter>
+              </Card>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+        <CarouselPrevious />
+        <CarouselNext />
+      </Carousel>
+    </div>
+  );
+};

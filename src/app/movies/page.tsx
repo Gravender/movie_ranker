@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 
 import { api } from "~/trpc/react";
 
-export default function NotFound() {
+export default function Home() {
   const { data: movies } = api.movie.getMovies.useQuery();
   const { data: genres } = api.movie.getMoviesGroupedGenre.useQuery();
   return (
