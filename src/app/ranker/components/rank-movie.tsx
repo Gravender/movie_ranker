@@ -17,7 +17,6 @@ import { api } from "~/trpc/react";
 import MovieDisplay from "./movie-display";
 import { useState } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { router } from "@trpc/server";
 import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
@@ -62,6 +61,14 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
       }
     },
   });
+  const resetRank = async () => {
+    form.reset();
+    await utils.movie.getMoviesToCompare.invalidate({
+      id: user_id,
+    });
+    setIndex(0);
+    router.refresh();
+  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -82,9 +89,7 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
     });
     form.reset();
     if (index === matches.length - 1) {
-      setIndex(0);
-      void utils.movie.getMoviesToCompare.invalidate({ id: user_id });
-      router.refresh();
+      void resetRank();
     } else {
       setIndex(index + 1);
     }
@@ -160,12 +165,7 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
                     score: 0,
                   });
                   if (index === matches.length - 1) {
-                    form.reset();
-                    setIndex(0);
-                    void utils.movie.getMoviesToCompare.invalidate({
-                      id: user_id,
-                    });
-                    router.refresh();
+                    void resetRank();
                   } else {
                     setIndex(index + 1);
                   }

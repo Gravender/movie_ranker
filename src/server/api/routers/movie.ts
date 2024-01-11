@@ -19,7 +19,9 @@ import {
 } from "~/server/db/schema";
 import { compareAsc, compareDesc } from "date-fns";
 import { eq } from "drizzle-orm";
-
+function notEmpty<TValue>(value: TValue | null | undefined): value is TValue {
+  return value !== null && value !== undefined;
+}
 export const movieRouter = createTRPCRouter({
   create: protectedProcedure
     .input(
@@ -221,11 +223,7 @@ export const movieRouter = createTRPCRouter({
     });
     return genres.map((genre) => {
       const uniqueMovies = new Set();
-      function notEmpty<TValue>(
-        value: TValue | null | undefined,
-      ): value is TValue {
-        return value !== null && value !== undefined;
-      }
+
       const movies = genre.moviesToGenres
         .filter((movie) => movie.movies !== null)
         .map((moviesToGenre) => {
@@ -329,21 +327,29 @@ export const movieRouter = createTRPCRouter({
           },
         },
       });
+      const matches = await ctx.db.query.movie_match.findMany({
+        where: (movie_match, { eq }) => eq(movie_match.user_id, input.id),
+      });
       movies = movies.sort((a, b) => {
         const a_matches = a.movie_1.length + a.movie_2.length;
+        const a_skipped =
+          a.movie_1.filter((match) => match.result === 0).length +
+          a.movie_2.filter((match) => match.result === 0).length;
+        const b_skipped =
+          b.movie_1.filter((match) => match.result === 0).length +
+          b.movie_2.filter((match) => match.result === 0).length;
+        const avg_skipped = (a_skipped + b_skipped + 1) / 2;
+        if (
+          a_skipped !== b_skipped &&
+          avg_skipped > matches.length / movies.length
+        )
+          return a_skipped - b_skipped;
         const b_matches = b.movie_1.length + b.movie_2.length;
         if (a_matches === b_matches) {
-          const a_skipped =
-            a.movie_1.filter((match) => match.result === 0).length +
-            a.movie_2.filter((match) => match.result === 0).length;
-          const b_skipped =
-            b.movie_1.filter((match) => match.result === 0).length +
-            b.movie_2.filter((match) => match.result === 0).length;
-          if (a_skipped !== b_skipped) return a_skipped - b_skipped;
           const a_elo = a.movie_elo[0]?.elo;
           const b_elo = b.movie_elo[0]?.elo;
           if (typeof a_elo === "number" && typeof b_elo === "number")
-            return a_elo - b_elo;
+            return b_elo - a_elo;
           if (a.release_date !== null && b.release_date !== null) {
             const a_decade = a.release_date?.getFullYear();
             const b_decade = b.release_date?.getFullYear();
@@ -352,14 +358,6 @@ export const movieRouter = createTRPCRouter({
         }
         return a_matches - b_matches;
       });
-      console.log(
-        movies
-          .map((movie) => ({
-            title: movie.title,
-            matches: movie.movie_1.length + movie.movie_2.length,
-          }))
-          .slice(0, 10),
-      );
       const movie_match: {
         movie_1: {
           id: string;
@@ -590,16 +588,15 @@ export const movieRouter = createTRPCRouter({
         const Pa = probability(Rb, Ra);
         if (d == 1) {
           return {
-            Ra: Ra + k * (1 - Pa),
-            Rb: Rb + k * (0 - Pb),
+            Ra: Math.round(Ra + k * (1 - Pa)),
+            Rb: Math.round(Rb + k * (0 - Pb)),
           };
         }
         return {
-          Ra: Ra + k * (0 - Pa),
-          Rb: Rb + k * (1 - Pb),
+          Ra: Math.round(Ra + k * (0 - Pa)),
+          Rb: Math.round(Rb + k * (1 - Pb)),
         };
       };
-
       //calculate movie elo
       const movie_1_elo = movie_1?.movie_elo[0]?.elo ?? 1000;
       const movie_2_elo = movie_2?.movie_elo[0]?.elo ?? 1000;
@@ -612,7 +609,6 @@ export const movieRouter = createTRPCRouter({
         movie_id: movie_2.id,
         elo: new_movie_elo.Rb,
       });
-
       //calculate user movie elo
       const movie_1_user_movie_elo = movie_1_user_elo?.elo ?? 1000;
       const movie_2_user_movie_elo = movie_2_user_elo?.elo ?? 1000;
@@ -631,7 +627,6 @@ export const movieRouter = createTRPCRouter({
         elo: new_user_movie_elo.Rb,
         user_id: input.user_id,
       });
-
       //calculate elo for genres
       const movie_2_genres = movie_1.moviesToGenre.map(
         (movieToGenre) => movieToGenre.genre.id,
@@ -640,17 +635,19 @@ export const movieRouter = createTRPCRouter({
         .filter((moviesToGenre) =>
           movie_2_genres.includes(moviesToGenre.genre.id),
         )
+        .filter(notEmpty)
         .map((genre) => ({
           id: genre.genre_id,
           movie_1: genre.genre,
           movie_2: movie_2.moviesToGenre.find(
             (movieToGenre) => movieToGenre.genre_id === genre.genre_id,
-          )!.genre,
+          )?.genre,
         }));
       genres.map(async (genre) => {
         //calculate genre movie elo
         const movie_1_genre_elo = genre.movie_1.genre_movie_elo[0]?.elo ?? 1000;
-        const movie_2_genre_elo = genre.movie_2.genre_movie_elo[0]?.elo ?? 1000;
+        const movie_2_genre_elo =
+          genre.movie_2?.genre_movie_elo[0]?.elo ?? 1000;
         const new_genre_movie_elo = eloRating(
           movie_1_genre_elo,
           movie_2_genre_elo,
@@ -690,7 +687,10 @@ export const movieRouter = createTRPCRouter({
           genre_id: genre.id,
         });
       });
-      console.log(new_movie_elo);
+      console.log({
+        movie1: movie_1.title + " Elo: " + new_movie_elo.Ra,
+        movie2: movie_2.title + " Elo: " + new_movie_elo.Rb,
+      });
       return new_movie_elo;
     }),
   test: protectedProcedure.query(async ({ ctx }) => {
