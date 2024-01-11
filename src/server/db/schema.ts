@@ -12,6 +12,7 @@ import {
   double,
 } from "drizzle-orm/mysql-core";
 import { type AdapterAccount } from "next-auth/adapters";
+import { createId } from "@paralleldrive/cuid2";
 
 /**
  * This is an example of how to use the multi-project schema feature of Drizzle ORM. Use the same
@@ -122,7 +123,8 @@ export const movies = mysqlTable("movie", {
   poster_src: text("poster_src"),
 });
 export const moviesRelations = relations(movies, ({ many }) => ({
-  movie_match: many(movie_match),
+  movie_1: many(movie_match, { relationName: "movie_1" }),
+  movie_2: many(movie_match, { relationName: "movie_2" }),
   user_movie_elo: many(user_movie_elo),
   movie_elo: many(movie_elo),
   moviesToGenre: many(moviesToGenre),
@@ -136,10 +138,15 @@ export const genre = mysqlTable("genre", {
 export const genreRelations = relations(genre, ({ many }) => ({
   moviesToGenres: many(moviesToGenre),
   genre_movie_elo: many(genre_movie_elo),
+  genre_movie_user_elo: many(genre_movie_user_elo),
 }));
 export const moviesToGenre = mysqlTable("movies_to_genre", {
-  movie_id: varchar("movie_id", { length: 255 }),
-  genre_id: varchar("genre_id", { length: 255 }),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  movie_id: varchar("movie_id", { length: 255 }).notNull(),
+  genre_id: varchar("genre_id", { length: 255 }).notNull(),
 });
 export const moviesToGenreRelations = relations(moviesToGenre, ({ one }) => ({
   movies: one(movies, {
@@ -152,10 +159,14 @@ export const moviesToGenreRelations = relations(moviesToGenre, ({ one }) => ({
   }),
 }));
 export const movie_match = mysqlTable("movie_match", {
-  user_id: varchar("user_id", { length: 255 }),
-  movie_1_id: varchar("movie_1_id", { length: 255 }),
-  movie_2_id: varchar("movie_2_id", { length: 255 }),
-  result: int("int"),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  user_id: varchar("user_id", { length: 255 }).notNull(),
+  movie_1_id: varchar("movie_1_id", { length: 255 }).notNull(),
+  movie_2_id: varchar("movie_2_id", { length: 255 }).notNull(),
+  result: int("int").notNull(),
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),
@@ -168,16 +179,22 @@ export const movie_matchRelations = relations(movie_match, ({ one }) => ({
   movie_1: one(movies, {
     fields: [movie_match.movie_1_id],
     references: [movies.id],
+    relationName: "movie_1",
   }),
   movie_2: one(movies, {
     fields: [movie_match.movie_2_id],
     references: [movies.id],
+    relationName: "movie_2",
   }),
 }));
 export const user_movie_elo = mysqlTable("user_movie_elo", {
-  user_id: varchar("user_id", { length: 255 }),
-  movie_id: varchar("movie_id", { length: 255 }),
-  elo: double("double"),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  user_id: varchar("user_id", { length: 255 }).notNull(),
+  movie_id: varchar("movie_id", { length: 255 }).notNull(),
+  elo: double("double").notNull(),
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),
@@ -193,8 +210,12 @@ export const user_movie_eloRelations = relations(user_movie_elo, ({ one }) => ({
   }),
 }));
 export const movie_elo = mysqlTable("movie_elo", {
-  movie_id: varchar("movie_id", { length: 255 }),
-  elo: double("double"),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  movie_id: varchar("movie_id", { length: 255 }).notNull(),
+  elo: double("double").notNull(),
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),
@@ -207,9 +228,13 @@ export const movie_eloRelations = relations(movie_elo, ({ one }) => ({
 }));
 
 export const genre_movie_elo = mysqlTable("genre_movie_elo", {
-  genre_id: varchar("genre_id", { length: 255 }),
-  movie_id: varchar("movie_id", { length: 255 }),
-  elo: double("double"),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  genre_id: varchar("genre_id", { length: 255 }).notNull(),
+  movie_id: varchar("movie_id", { length: 255 }).notNull(),
+  elo: double("double").notNull(),
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),
@@ -230,10 +255,14 @@ export const genre_movie_eloRelations = relations(
 );
 
 export const genre_movie_user_elo = mysqlTable("genre_movie_user_elo", {
-  user_id: varchar("user_id", { length: 255 }),
-  genre_id: varchar("genre_id", { length: 255 }),
-  movie_id: varchar("movie_id", { length: 255 }),
-  elo: double("double"),
+  id: varchar("id", { length: 128 })
+    .$defaultFn(() => createId())
+    .notNull()
+    .primaryKey(),
+  user_id: varchar("user_id", { length: 255 }).notNull(),
+  genre_id: varchar("genre_id", { length: 255 }).notNull(),
+  movie_id: varchar("movie_id", { length: 255 }).notNull(),
+  elo: double("double").notNull(),
   createdAt: timestamp("created_at")
     .default(sql`CURRENT_TIMESTAMP`)
     .notNull(),

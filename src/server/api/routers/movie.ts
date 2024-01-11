@@ -1,12 +1,23 @@
 import { z } from "zod";
 import { env } from "~/env";
-
+import fs from "fs";
+import path from "path";
 import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
 } from "~/server/api/trpc";
-import { movies, genre, moviesToGenre } from "~/server/db/schema";
+import {
+  movies,
+  genre,
+  moviesToGenre,
+  movie_match,
+  movie_elo,
+  user_movie_elo,
+  genre_movie_elo,
+  genre_movie_user_elo,
+} from "~/server/db/schema";
+import { compareAsc } from "date-fns";
 
 export const movieRouter = createTRPCRouter({
   create: protectedProcedure
@@ -94,6 +105,10 @@ export const movieRouter = createTRPCRouter({
               genre: true,
             },
           },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
         },
       });
     }),
@@ -108,7 +123,6 @@ export const movieRouter = createTRPCRouter({
       const movie = await ctx.db.query.movies.findFirst({
         where: (movies, { eq }) => eq(movies.id, input.id),
       });
-      console.log(input);
       if (!movie) return null;
       const genres = await Promise.all(
         input.genres.map(async (genre_name) => {
@@ -151,6 +165,30 @@ export const movieRouter = createTRPCRouter({
       },
     });
   }),
+  getMoviesByElo: publicProcedure.query(async ({ ctx }) => {
+    const movies = await ctx.db.query.movies.findMany({
+      orderBy: (movies, { desc }) => [desc(movies.release_date)],
+      with: {
+        moviesToGenre: {
+          with: {
+            genre: true,
+          },
+        },
+        movie_elo: {
+          orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+          limit: 1,
+        },
+      },
+    });
+    movies.sort((a, b) => {
+      const a_elo = a.movie_elo[0]?.elo;
+      const b_elo = b.movie_elo[0]?.elo;
+      if (typeof a_elo === "number" && typeof b_elo === "number")
+        return a_elo - b_elo;
+      return a.movie_elo.length - b.movie_elo.length;
+    });
+    return movies.map((movie) => ({ ...movie, movie_elo: movie.movie_elo[0] }));
+  }),
   getMoviesGroupedGenre: publicProcedure.query(({ ctx }) => {
     return ctx.db.query.genre.findMany({
       orderBy: (genre, { asc }) => [asc(genre.name)],
@@ -191,5 +229,401 @@ export const movieRouter = createTRPCRouter({
     }),
   getGenres: publicProcedure.query(({ ctx }) => {
     return ctx.db.query.genre.findMany({});
+  }),
+  getMoviesToCompare: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      let movies = await ctx.db.query.movies.findMany({
+        with: {
+          movie_1: {
+            where: (movie_match, { eq }) => eq(movie_match.user_id, input.id),
+          },
+          movie_2: {
+            where: (movie_match, { eq }) => eq(movie_match.user_id, input.id),
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      movies = movies.sort((a, b) => {
+        const a_matches = a.movie_1.length + a.movie_2.length;
+        const b_matches = b.movie_1.length + b.movie_2.length;
+        if (a_matches === b_matches) {
+          const a_skipped =
+            a.movie_1.filter((match) => match.result === 0).length +
+            a.movie_2.filter((match) => match.result === 0).length;
+          const b_skipped =
+            b.movie_1.filter((match) => match.result === 0).length +
+            b.movie_2.filter((match) => match.result === 0).length;
+          if (a_skipped !== b_skipped) return a_skipped - b_skipped;
+          const a_elo = a.movie_elo[0]?.elo;
+          const b_elo = b.movie_elo[0]?.elo;
+          if (typeof a_elo === "number" && typeof b_elo === "number")
+            return a_elo - b_elo;
+          if (a.release_date !== null && b.release_date !== null) {
+            const a_decade = a.release_date?.getFullYear();
+            const b_decade = b.release_date?.getFullYear();
+            return Math.floor(b_decade / 8) * 8 - Math.floor(a_decade / 8) * 8;
+          }
+        }
+        return a_matches - b_matches;
+      });
+      console.log(
+        movies
+          .map((movie) => ({
+            title: movie.title,
+            matches: movie.movie_1.length + movie.movie_2.length,
+          }))
+          .slice(0, 10),
+      );
+      const movie_match: {
+        movie_1: {
+          id: string;
+          title: string | null;
+          budget: string | null;
+          release_date: Date | null;
+          poster_src: string | null;
+        };
+        movie_2: {
+          id: string;
+          title: string | null;
+          budget: string | null;
+          release_date: Date | null;
+          poster_src: string | null;
+        };
+      }[] = [];
+      // eslint-disable-next-line @typescript-eslint/prefer-for-of
+      for (let index = 0; index < movies.length; index++) {
+        const movie1 = movies[index];
+        if (movie1 === undefined) break;
+        if (
+          movie_match.find(
+            (match) =>
+              match.movie_1.id === movie1.id || match.movie_2.id === movie1.id,
+          ) !== undefined
+        )
+          continue;
+        let movie2:
+          | number
+          | {
+              id: string;
+              title: string | null;
+              budget: string | null;
+              release_date: Date | null;
+              poster_src: string | null;
+              movie_1: {
+                createdAt: Date;
+                user_id: string | null;
+                movie_1_id: string | null;
+                movie_2_id: string | null;
+                result: number | null;
+              }[];
+              movie_2: {
+                createdAt: Date;
+                user_id: string | null;
+                movie_1_id: string | null;
+                movie_2_id: string | null;
+                result: number | null;
+              }[];
+            } = 1;
+        let highest = 1;
+        while (typeof movie2 === "number") {
+          // eslint-disable-next-line @typescript-eslint/prefer-for-of
+          for (let i = 0; i < movies.length; i++) {
+            const temp = movies[i];
+            if (temp === undefined) continue;
+            if (
+              temp.id === movie1.id ||
+              movie_match.findIndex(
+                (match) =>
+                  match.movie_1.id === movie1.id ||
+                  match.movie_1.id === temp.id ||
+                  match.movie_2.id === movie1.id ||
+                  match.movie_2.id === temp.id,
+              ) !== -1
+            )
+              continue;
+            if (temp.movie_1.length === 0) {
+              movie2 = temp;
+              break;
+            }
+            const matches = temp.movie_1.reduce((count, current) => {
+              if (
+                current.movie_1_id === movie1.id ||
+                current.movie_2_id === movie1.id
+              )
+                return count + 1;
+              return count;
+            }, 0);
+            if (matches < movie2) {
+              movie2 = temp;
+              break;
+            }
+            if (matches > highest) highest = matches;
+            if (highest > 1 && matches === highest && highest === movie2) {
+              movie2 = temp;
+              break;
+            }
+          }
+          if (typeof movie2 === "number") movie2++;
+          else {
+            break;
+          }
+          if (movie2 > 10) break;
+        }
+        if (typeof movie2 === "number") continue;
+        movie_match.push({
+          movie_1: {
+            id: movie1.id,
+            title: movie1.title,
+            release_date: movie1.release_date,
+            poster_src: movie1.poster_src,
+            budget: movie1.budget,
+          },
+          movie_2: {
+            id: movie2.id,
+            title: movie2.title,
+            release_date: movie2.release_date,
+            poster_src: movie2.poster_src,
+            budget: movie2.budget,
+          },
+        });
+        if (movie_match.length > 20) break;
+      }
+      return movie_match;
+    }),
+  rankMovie: protectedProcedure
+    .input(
+      z.object({
+        user_id: z.string(),
+        movie_1: z.string(),
+        movie_2: z.string(),
+        score: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.insert(movie_match).values({
+        movie_1_id: input.movie_1,
+        movie_2_id: input.movie_2,
+        result: input.score,
+        user_id: input.user_id,
+      });
+      if (input.score === 0) return null;
+      const movie_1 = await ctx.db.query.movies.findFirst({
+        where: (movies, { eq }) => eq(movies.id, input.movie_1),
+        with: {
+          moviesToGenre: {
+            with: {
+              genre: {
+                with: {
+                  genre_movie_elo: {
+                    where: (user_movie_elo, { eq }) =>
+                      eq(user_movie_elo.movie_id, input.movie_1),
+                    orderBy: (genre_movie_elo, { desc }) => [
+                      desc(genre_movie_elo.createdAt),
+                    ],
+                    limit: 1,
+                  },
+                  genre_movie_user_elo: {
+                    where: (user_movie_elo, { eq }) =>
+                      eq(user_movie_elo.movie_id, input.movie_1) &&
+                      eq(user_movie_elo.user_id, input.user_id),
+                    orderBy: (genre_movie_elo, { desc }) => [
+                      desc(genre_movie_elo.createdAt),
+                    ],
+                    limit: 1,
+                  },
+                },
+              },
+            },
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      const movie_2 = await ctx.db.query.movies.findFirst({
+        where: (movies, { eq }) => eq(movies.id, input.movie_2),
+        with: {
+          moviesToGenre: {
+            with: {
+              genre: {
+                with: {
+                  genre_movie_elo: {
+                    where: (user_movie_elo, { eq }) =>
+                      eq(user_movie_elo.movie_id, input.movie_1),
+                    orderBy: (genre_movie_elo, { desc }) => [
+                      desc(genre_movie_elo.createdAt),
+                    ],
+                    limit: 1,
+                  },
+                  genre_movie_user_elo: {
+                    where: (user_movie_elo, { eq }) =>
+                      eq(user_movie_elo.movie_id, input.movie_2) &&
+                      eq(user_movie_elo.user_id, input.user_id),
+                    orderBy: (genre_movie_elo, { desc }) => [
+                      desc(genre_movie_elo.createdAt),
+                    ],
+                    limit: 1,
+                  },
+                },
+              },
+            },
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      const movie_1_user_elo =
+        await ctx.db.query.genre_movie_user_elo.findFirst({
+          where: (user_movie_elo, { eq }) =>
+            eq(user_movie_elo.user_id, input.user_id) &&
+            eq(user_movie_elo.movie_id, input.movie_1),
+          orderBy: (user_movie_elo, { desc }) => [
+            desc(user_movie_elo.createdAt),
+          ],
+        });
+      const movie_2_user_elo =
+        await ctx.db.query.genre_movie_user_elo.findFirst({
+          where: (user_movie_elo, { eq }) =>
+            eq(user_movie_elo.user_id, input.user_id) &&
+            eq(user_movie_elo.movie_id, input.movie_2),
+          orderBy: (user_movie_elo, { desc }) => [
+            desc(user_movie_elo.createdAt),
+          ],
+        });
+      if (movie_1 === undefined || movie_2 == undefined) return null;
+
+      const probability = (rating1: number, rating2: number) =>
+        (1.0 * 1.0) /
+        (1 + 1.0 * Math.pow(10, (1.0 * (rating1 - rating2)) / 400));
+      const eloRating = (Ra: number, Rb: number, d: number) => {
+        const k = 30;
+        const Pb = probability(Ra, Rb);
+        const Pa = probability(Rb, Ra);
+        if (d == 1) {
+          return {
+            Ra: Ra + k * (1 - Pa),
+            Rb: Rb + k * (0 - Pb),
+          };
+        }
+        return {
+          Ra: Ra + k * (0 - Pa),
+          Rb: Rb + k * (1 - Pb),
+        };
+      };
+
+      //calculate movie elo
+      const movie_1_elo = movie_1?.movie_elo[0]?.elo ?? 1000;
+      const movie_2_elo = movie_2?.movie_elo[0]?.elo ?? 1000;
+      const new_movie_elo = eloRating(movie_1_elo, movie_2_elo, input.score);
+      await ctx.db.insert(movie_elo).values({
+        movie_id: movie_1.id,
+        elo: new_movie_elo.Ra,
+      });
+      await ctx.db.insert(movie_elo).values({
+        movie_id: movie_2.id,
+        elo: new_movie_elo.Rb,
+      });
+
+      //calculate user movie elo
+      const movie_1_user_movie_elo = movie_1_user_elo?.elo ?? 1000;
+      const movie_2_user_movie_elo = movie_2_user_elo?.elo ?? 1000;
+      const new_user_movie_elo = eloRating(
+        movie_1_user_movie_elo,
+        movie_2_user_movie_elo,
+        input.score,
+      );
+      await ctx.db.insert(user_movie_elo).values({
+        movie_id: movie_1.id,
+        elo: new_user_movie_elo.Ra,
+        user_id: input.user_id,
+      });
+      await ctx.db.insert(user_movie_elo).values({
+        movie_id: movie_2.id,
+        elo: new_user_movie_elo.Rb,
+        user_id: input.user_id,
+      });
+
+      //calculate elo for genres
+      const movie_2_genres = movie_1.moviesToGenre.map(
+        (movieToGenre) => movieToGenre.genre.id,
+      );
+      const genres = movie_1.moviesToGenre
+        .filter((moviesToGenre) =>
+          movie_2_genres.includes(moviesToGenre.genre.id),
+        )
+        .map((genre) => ({
+          id: genre.genre_id,
+          movie_1: genre.genre,
+          movie_2: movie_2.moviesToGenre.find(
+            (movieToGenre) => movieToGenre.genre_id === genre.genre_id,
+          )!.genre,
+        }));
+      genres.map(async (genre) => {
+        //calculate genre movie elo
+        const movie_1_genre_elo = genre.movie_1.genre_movie_elo[0]?.elo ?? 1000;
+        const movie_2_genre_elo = genre.movie_2.genre_movie_elo[0]?.elo ?? 1000;
+        const new_genre_movie_elo = eloRating(
+          movie_1_genre_elo,
+          movie_2_genre_elo,
+          input.score,
+        );
+        await ctx.db.insert(genre_movie_elo).values({
+          movie_id: movie_1.id,
+          elo: new_genre_movie_elo.Ra,
+          genre_id: genre.id,
+        });
+        await ctx.db.insert(genre_movie_elo).values({
+          movie_id: movie_2.id,
+          elo: new_genre_movie_elo.Rb,
+          genre_id: genre.id,
+        });
+
+        //calculate user movie elo
+        const movie_1_genre_user_movie_elo =
+          genre.movie_1.genre_movie_user_elo[0]?.elo ?? 1000;
+        const movie_2_genre_user_movie_elo =
+          genre.movie_2?.genre_movie_user_elo[0]?.elo ?? 1000;
+        const new_genre_movie_user_elo = eloRating(
+          movie_1_genre_user_movie_elo,
+          movie_2_genre_user_movie_elo,
+          input.score,
+        );
+        await ctx.db.insert(genre_movie_user_elo).values({
+          movie_id: movie_1.id,
+          elo: new_genre_movie_user_elo.Ra,
+          user_id: input.user_id,
+          genre_id: genre.id,
+        });
+        await ctx.db.insert(genre_movie_user_elo).values({
+          movie_id: movie_2.id,
+          elo: new_genre_movie_user_elo.Rb,
+          user_id: input.user_id,
+          genre_id: genre.id,
+        });
+      });
+      console.log(new_movie_elo);
+      return new_movie_elo;
+    }),
+  test: protectedProcedure.query(async ({ ctx }) => {
+    const movies = await ctx.db.query.movies.findMany({
+      with: {
+        movie_elo: {
+          orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+        },
+        movie_1: true,
+        movie_2: true,
+      },
+    });
+    movies.sort(
+      (a, b) => (b.movie_elo[0]?.elo ?? 0) - (a.movie_elo[0]?.elo ?? 0),
+    );
+    return movies;
   }),
 });
