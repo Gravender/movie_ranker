@@ -5,11 +5,7 @@ export const siteConfig = {
   description: "Ranking movies using a elo based system.",
   mainNav: [
     {
-      title: "Home",
-      href: "/",
-    },
-    {
-      title: "Elo Movies",
+      title: "Movies",
       href: "/movies",
     },
     {

@@ -1,119 +1,73 @@
-"use client";
-import { Card, CardFooter, CardTitle } from "@/components/ui/card";
+import { api } from "~/trpc/server";
+import { getServerAuthSession } from "@/src/server/auth";
 import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselPrevious,
-  CarouselNext,
-} from "@/components/ui/carousel";
-import { compareDesc, format } from "date-fns";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Overview } from "./_components/overview";
+import { HighestEloMovies } from "./_components/highest-elo-movies";
+import Link from "next/link";
 
-import { api } from "~/trpc/react";
-
-export default function Home() {
-  const { data: movies } = api.movie.getMovies.useQuery();
-  const { data: genres } = api.movie.getMoviesGroupedGenre.useQuery();
+export default async function Home() {
+  const session = await getServerAuthSession();
+  const movies = await api.movie.getMoviesByElo.query();
+  const eloData = movies
+    .map((movie) => movie?.movie_elo ?? 0)
+    .filter((elo) => elo !== 0);
   return (
-    <div className="mt-2 flex h-full w-full flex-col items-center justify-center gap-2">
-      {movies ? <MovieCarousel movies={movies} title={"All Movies"} /> : null}
-      {genres
-        ? genres.map((genre) => {
-            const genre_movies = genre.moviesToGenres.flatMap(
-              (moviesToGenre) => {
-                if (moviesToGenre.movies) {
-                  return [moviesToGenre.movies];
-                }
-                return [];
-              },
-            );
-            if (genre_movies.length >= 5)
-              return (
-                <MovieCarousel
-                  movies={genre_movies.sort((a, b) => {
-                    if (a.release_date !== null && b.release_date !== null)
-                      return compareDesc(a.release_date, b.release_date);
-                    return a.moviesToGenre.length - b.moviesToGenre.length;
-                  })}
-                  title={genre.name}
-                />
-              );
-            return null;
-          })
-        : null}
+    <div className="m-10 flex w-full justify-center">
+      <div className="w-full max-w-7xl space-y-4 px-4">
+        <div className="flex h-24 flex-col items-center justify-center lg:px-0">
+          <div className="">
+            <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+              <div className="flex flex-col space-y-2 text-center">
+                {session ? (
+                  <h1 className="text-2xl font-semibold tracking-tight">
+                    Welcome, {session.user.name}
+                  </h1>
+                ) : (
+                  <div className="flex w-full flex-col items-center justify-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight">
+                      Login to start ranking movies
+                    </h1>
+                    <Link
+                      href={session ? "/api/auth/signout" : "/api/auth/signin"}
+                      className="inline-flex h-10 w-2/3 items-center justify-center whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {session ? "Sign out" : "Sign in"}
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+          <Card className="col-span-2 lg:col-span-4">
+            <CardHeader>
+              <CardTitle>Elo Normal Distribution</CardTitle>
+            </CardHeader>
+            <CardContent className="pl-2">
+              <Overview data={eloData} />
+            </CardContent>
+          </Card>
+          <Card className="col-span-2 lg:col-span-3">
+            <CardHeader>
+              <CardTitle>Highest Rated Movies</CardTitle>
+              <CardDescription>
+                {movies.filter((movie) => movie.movie_elo !== undefined)
+                  .length + " Rated Movies"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <HighestEloMovies movies={movies.slice(0, 5)} />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
-type movieCarouselProps = {
-  movies: {
-    id: string;
-    title: string | null;
-    budget: string | null;
-    release_date: Date | null;
-    poster_src: string | null;
-    moviesToGenre: {
-      movie_id: string | null;
-      genre_id: string | null;
-      genre: {
-        name: string;
-        id: string;
-      } | null;
-    }[];
-  }[];
-  title: string;
-};
-const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
-  const router = useRouter();
-  return (
-    <div className="flex w-full max-w-7xl flex-col items-center justify-center">
-      <CardTitle className="w-full pl-12 text-left">{`${title}:`}</CardTitle>
-      <Carousel
-        opts={{
-          align: "start",
-          loop: true,
-        }}
-        className="mt-4 w-full max-w-xs sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl"
-      >
-        <CarouselContent>
-          {movies.map((movie) => (
-            <CarouselItem
-              key={movie.id}
-              className="sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/5 2xl:basis-1/6"
-            >
-              <Card
-                className="h-96 w-full"
-                onClick={() => router.push(`/movie/${movie.id}`)}
-              >
-                <div className="relative h-4/5 w-full">
-                  {movie.poster_src !== null && movie.poster_src !== "N/A" ? (
-                    <Image
-                      src={movie.poster_src}
-                      alt={movie.title ?? ""}
-                      fill
-                    />
-                  ) : null}
-                </div>
-                <CardFooter>
-                  <div className="flex flex-grow flex-col items-start">
-                    <h2 className="pt-1 text-left font-medium">
-                      {movie.title}
-                    </h2>
-                    {movie.release_date ? (
-                      <span className="flex items-center ">
-                        {format(movie.release_date, "LLL dd, y")}
-                      </span>
-                    ) : null}
-                  </div>
-                </CardFooter>
-              </Card>
-            </CarouselItem>
-          ))}
-        </CarouselContent>
-        <CarouselPrevious />
-        <CarouselNext />
-      </Carousel>
-    </div>
-  );
-};
