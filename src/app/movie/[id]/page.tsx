@@ -30,6 +30,9 @@ export default async function NotFound({ params }: Props) {
           <CardTitle>{movie.title}</CardTitle>
           <CardDescription>
             {movie.release_date?.toLocaleString()}
+            <span className="px-2 font-semibold">
+              Elo: {movie.movie_elo[0]?.elo}
+            </span>
           </CardDescription>
         </CardHeader>
         <div className="relative h-[36rem] w-full">
