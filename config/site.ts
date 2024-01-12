@@ -9,8 +9,12 @@ export const siteConfig = {
       href: "/",
     },
     {
-      title: "Movies",
+      title: "Elo Movies",
       href: "/movies",
+    },
+    {
+      title: "Ranker",
+      href: "/ranker",
     },
   ],
   links: {

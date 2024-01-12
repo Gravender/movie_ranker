@@ -7,7 +7,6 @@ import {
   CarouselPrevious,
   CarouselNext,
 } from "@/components/ui/carousel";
-import { format } from "date-fns";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
