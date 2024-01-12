@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { env } from "~/env";
-import fs from "fs";
-import path from "path";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -17,8 +15,7 @@ import {
   genre_movie_elo,
   genre_movie_user_elo,
 } from "~/server/db/schema";
-import { compareAsc, compareDesc } from "date-fns";
-import { eq } from "drizzle-orm";
+import { compareDesc } from "date-fns";
 function notEmpty<TValue>(value: TValue | null | undefined): value is TValue {
   return value !== null && value !== undefined;
 }
@@ -33,10 +30,12 @@ export const movieRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       let movie = await ctx.db.query.movies.findFirst({
-        where: (movies, { eq }) =>
-          eq(movies.title, input.title) &&
-          eq(movies.release_date, input.releaseDate),
+        where: (movies, { eq }) => eq(movies.title, input.title),
       });
+      console.log(1);
+      console.log(movie);
+      console.log(input.title);
+      console.log(input.releaseDate);
       if (movie) return null;
       const response = await fetch(
         `http://www.omdbapi.com/?apikey=${env.OMDBAPI_API_KEY}&t=${
@@ -341,7 +340,7 @@ export const movieRouter = createTRPCRouter({
         const avg_skipped = (a_skipped + b_skipped + 1) / 2;
         if (
           a_skipped !== b_skipped &&
-          avg_skipped > matches.length / movies.length
+          avg_skipped > (matches.length * 2 + movies.length / 2) / movies.length
         )
           return a_skipped - b_skipped;
         const b_matches = b.movie_1.length + b.movie_2.length;
@@ -349,7 +348,7 @@ export const movieRouter = createTRPCRouter({
           const a_elo = a.movie_elo[0]?.elo;
           const b_elo = b.movie_elo[0]?.elo;
           if (typeof a_elo === "number" && typeof b_elo === "number")
-            return b_elo - a_elo;
+            return Math.floor(b_elo / 15) * 15 - Math.floor(a_elo / 15) * 15;
           if (a.release_date !== null && b.release_date !== null) {
             const a_decade = a.release_date?.getFullYear();
             const b_decade = b.release_date?.getFullYear();
@@ -429,7 +428,7 @@ export const movieRouter = createTRPCRouter({
               movie2 = temp;
               break;
             }
-            const matches = temp.movie_1.reduce((count, current) => {
+            const matches_movie_1 = temp.movie_1.reduce((count, current) => {
               if (
                 current.movie_1_id === movie1.id ||
                 current.movie_2_id === movie1.id
@@ -437,6 +436,14 @@ export const movieRouter = createTRPCRouter({
                 return count + 1;
               return count;
             }, 0);
+            const matches = temp.movie_2.reduce((count, current) => {
+              if (
+                current.movie_1_id === movie1.id ||
+                current.movie_2_id === movie1.id
+              )
+                return count + 1;
+              return count;
+            }, matches_movie_1);
             if (matches < movie2) {
               movie2 = temp;
               break;
@@ -451,7 +458,7 @@ export const movieRouter = createTRPCRouter({
           else {
             break;
           }
-          if (movie2 > 10) break;
+          if (movie2 > 30) break;
         }
         if (typeof movie2 === "number") continue;
         movie_match.push({
@@ -470,7 +477,7 @@ export const movieRouter = createTRPCRouter({
             budget: movie2.budget,
           },
         });
-        if (movie_match.length > 20) break;
+        if (movie_match.length > 25) break;
       }
       return movie_match;
     }),
@@ -507,9 +514,11 @@ export const movieRouter = createTRPCRouter({
                     limit: 1,
                   },
                   genre_movie_user_elo: {
-                    where: (user_movie_elo, { eq }) =>
-                      eq(user_movie_elo.movie_id, input.movie_1) &&
-                      eq(user_movie_elo.user_id, input.user_id),
+                    where: (user_movie_elo, { eq, and }) =>
+                      and(
+                        eq(user_movie_elo.movie_id, input.movie_1),
+                        eq(user_movie_elo.user_id, input.user_id),
+                      ),
                     orderBy: (genre_movie_elo, { desc }) => [
                       desc(genre_movie_elo.createdAt),
                     ],
@@ -541,9 +550,11 @@ export const movieRouter = createTRPCRouter({
                     limit: 1,
                   },
                   genre_movie_user_elo: {
-                    where: (user_movie_elo, { eq }) =>
-                      eq(user_movie_elo.movie_id, input.movie_2) &&
-                      eq(user_movie_elo.user_id, input.user_id),
+                    where: (user_movie_elo, { eq, and }) =>
+                      and(
+                        eq(user_movie_elo.movie_id, input.movie_2),
+                        eq(user_movie_elo.user_id, input.user_id),
+                      ),
                     orderBy: (genre_movie_elo, { desc }) => [
                       desc(genre_movie_elo.createdAt),
                     ],
@@ -561,18 +572,22 @@ export const movieRouter = createTRPCRouter({
       });
       const movie_1_user_elo =
         await ctx.db.query.genre_movie_user_elo.findFirst({
-          where: (user_movie_elo, { eq }) =>
-            eq(user_movie_elo.user_id, input.user_id) &&
-            eq(user_movie_elo.movie_id, input.movie_1),
+          where: (user_movie_elo, { eq, and }) =>
+            and(
+              eq(user_movie_elo.user_id, input.user_id),
+              eq(user_movie_elo.movie_id, input.movie_1),
+            ),
           orderBy: (user_movie_elo, { desc }) => [
             desc(user_movie_elo.createdAt),
           ],
         });
       const movie_2_user_elo =
         await ctx.db.query.genre_movie_user_elo.findFirst({
-          where: (user_movie_elo, { eq }) =>
-            eq(user_movie_elo.user_id, input.user_id) &&
-            eq(user_movie_elo.movie_id, input.movie_2),
+          where: (user_movie_elo, { eq, and }) =>
+            and(
+              eq(user_movie_elo.user_id, input.user_id),
+              eq(user_movie_elo.movie_id, input.movie_2),
+            ),
           orderBy: (user_movie_elo, { desc }) => [
             desc(user_movie_elo.createdAt),
           ],
