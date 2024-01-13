@@ -723,4 +723,75 @@ export const movieRouter = createTRPCRouter({
     );
     return movies;
   }),
+  movieStats: publicProcedure
+    .input(
+      z.object({
+        user_id: z.string().optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const users = await ctx.db.query.users.findMany({
+        with: {
+          movie_match: true,
+        },
+      });
+      let movies =
+        input.user_id !== undefined
+          ? await ctx.db.query.user_movie_elo.findMany({
+              where: (user_movie_elo, { eq }) =>
+                eq(user_movie_elo.user_id, input.user_id ?? ""),
+              orderBy: (user_movie_elo, { desc }) => [
+                desc(user_movie_elo.createdAt),
+              ],
+            })
+          : 0;
+      if (typeof movies !== "number") {
+        const uniqueMovies = new Set();
+
+        movies = movies
+          .map((movie) => {
+            const movieId = movie.id; // Get the movie ID
+            // Check if the movie ID is already in the Set
+            if (!uniqueMovies.has(movieId)) {
+              // If not, add it to the Set and return the movie data
+              uniqueMovies.add(movieId);
+              return movie;
+            }
+            return null; // Return null for duplicate movies
+          })
+          .filter(notEmpty);
+      }
+      const ranking = users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        matches: user.movie_match.length,
+      }));
+      ranking.sort((a, b) => b.matches - a.matches);
+      const totalMatches = users.reduce((total, curr) => {
+        return total + curr.movie_match.length;
+      }, 0);
+      const userMatches =
+        users.find((user) => user.id === input.user_id)?.movie_match?.length ??
+        0;
+      const averageMatches = totalMatches / users.length;
+      const percentageDiff =
+        (Math.abs(userMatches - averageMatches) /
+          ((userMatches + averageMatches) / 2)) *
+        100;
+      return {
+        matches: totalMatches,
+        userMatches: {
+          userMatches,
+          percentageDiff:
+            userMatches > averageMatches ? percentageDiff : percentageDiff * -1,
+        },
+        ranking: ranking,
+        averageElo:
+          typeof movies !== "number"
+            ? movies.reduce((total, curr) => {
+                return total + curr.elo;
+              }, 0) / movies.length
+            : 1000,
+      };
+    }),
 });
