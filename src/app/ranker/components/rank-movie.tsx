@@ -49,7 +49,7 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
   const router = useRouter();
   const utils = api.useUtils();
   const insertMatch = api.movie.rankMovie.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result === null) {
         toast({
           title: "Match Skipped",
@@ -59,6 +59,12 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
           title: "Successfully ranked",
         });
       }
+      if (index === matches.length - 1) {
+        await resetRank();
+      } else {
+        form.reset();
+        setIndex(index + 1);
+      }
     },
   });
   const resetRank = async () => {
@@ -66,8 +72,8 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
     await utils.movie.getMoviesToCompare.invalidate({
       id: user_id,
     });
-    setIndex(0);
     router.refresh();
+    setIndex(0);
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -87,12 +93,6 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
       user_id,
       score: data.selected === movie_1 ? 1 : data.selected === movie_2 ? 2 : 0,
     });
-    form.reset();
-    if (index === matches.length - 1) {
-      void resetRank();
-    } else {
-      setIndex(index + 1);
-    }
   }
 
   return (
@@ -142,10 +142,10 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
             <div className="flex w-full items-center justify-center gap-6">
               <Button
                 disabled={
+                  insertMatch.isLoading &&
                   !(
                     form.getValues().selected === matches[index]?.movie_1.id ||
-                    form.getValues().selected === matches[index]?.movie_2.id ||
-                    !insertMatch.isLoading
+                    form.getValues().selected === matches[index]?.movie_2.id
                   )
                 }
                 variant="secondary"
@@ -164,11 +164,6 @@ export const RankMovie = ({ matches, user_id }: RankMovieProps) => {
                     user_id,
                     score: 0,
                   });
-                  if (index === matches.length - 1) {
-                    void resetRank();
-                  } else {
-                    setIndex(index + 1);
-                  }
                 }}
               >
                 skip
