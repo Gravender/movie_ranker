@@ -340,15 +340,21 @@ export const movieRouter = createTRPCRouter({
         const avg_skipped = (a_skipped + b_skipped + 1) / 2;
         if (
           a_skipped !== b_skipped &&
-          avg_skipped > (matches.length * 2 + movies.length / 2) / movies.length
+          avg_skipped > matches.length / 3 / movies.length
         )
           return a_skipped - b_skipped;
         const b_matches = b.movie_1.length + b.movie_2.length;
         if (a_matches === b_matches) {
           const a_elo = a.movie_elo[0]?.elo;
           const b_elo = b.movie_elo[0]?.elo;
-          if (typeof a_elo === "number" && typeof b_elo === "number")
-            return Math.floor(b_elo / 15) * 15 - Math.floor(a_elo / 15) * 15;
+          if (typeof a_elo === "number" || typeof b_elo === "number") {
+            if (typeof a_elo === "number" && typeof b_elo !== "number")
+              return -1;
+            if (typeof a_elo !== "number" && typeof b_elo === "number")
+              return 1;
+            if (typeof a_elo === "number" && typeof b_elo === "number")
+              return Math.floor(b_elo / 15) * 15 - Math.floor(a_elo / 15) * 15;
+          }
           if (a.release_date !== null && b.release_date !== null) {
             const a_decade = a.release_date?.getFullYear();
             const b_decade = b.release_date?.getFullYear();
