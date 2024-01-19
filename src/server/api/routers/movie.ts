@@ -114,6 +114,17 @@ export const movieRouter = createTRPCRouter({
         },
       });
     }),
+  getGenre: publicProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.genre.findFirst({
+        where: (genre, { eq }) => eq(genre.id, input.id),
+      });
+    }),
   updateMovieGenres: protectedProcedure
     .input(
       z.object({
@@ -196,6 +207,51 @@ export const movieRouter = createTRPCRouter({
       movie_elo: movie.movie_elo[0]?.elo,
     }));
   }),
+  getGenreMoviesByElo: publicProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const movies = await ctx.db.query.movies.findMany({
+        orderBy: (movies, { desc }) => [desc(movies.release_date)],
+        where: (movies, { inArray, eq }) =>
+          inArray(
+            movies.id,
+            ctx.db
+              .select({ id: moviesToGenre.movie_id })
+              .from(moviesToGenre)
+              .where(eq(moviesToGenre.genre_id, input.id)),
+          ),
+        with: {
+          moviesToGenre: {
+            with: {
+              genre: true,
+            },
+          },
+          genre_movie_elo: {
+            where: (genre_movie_elo, { eq }) =>
+              eq(genre_movie_elo.genre_id, input.id),
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      movies.sort((a, b) => {
+        const a_elo = a.genre_movie_elo[0]?.elo;
+        const b_elo = b.genre_movie_elo[0]?.elo;
+        if (typeof a_elo === "number" && typeof b_elo === "number")
+          return b_elo - a_elo;
+        if (typeof a_elo === "number") return -1;
+        if (typeof b_elo === "number") return 1;
+        return a.genre_movie_elo.length - b.genre_movie_elo.length;
+      });
+      return movies.map((movie) => ({
+        ...movie,
+        movie_elo: movie.genre_movie_elo[0]?.elo,
+      }));
+    }),
   getMoviesGroupedGenreElo: publicProcedure.query(async ({ ctx }) => {
     const genres = await ctx.db.query.genre.findMany({
       orderBy: (genre, { asc }) => [asc(genre.name)],
