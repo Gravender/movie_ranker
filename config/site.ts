@@ -9,6 +9,10 @@ export const siteConfig = {
       href: "/movies",
     },
     {
+      title: "Genre's",
+      href: "/genres",
+    },
+    {
       title: "Ranker",
       href: "/ranker",
     },
