@@ -543,6 +543,196 @@ export const movieRouter = createTRPCRouter({
       }
       return movie_match;
     }),
+  getGenreMoviesToCompare: protectedProcedure
+    .input(z.object({ user_id: z.string(), genre_id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      let movies = await ctx.db.query.movies.findMany({
+        where: (movies, { inArray, eq }) =>
+          inArray(
+            movies.id,
+            ctx.db
+              .select({ id: moviesToGenre.movie_id })
+              .from(moviesToGenre)
+              .where(eq(moviesToGenre.genre_id, input.genre_id)),
+          ),
+        with: {
+          movie_1: {
+            where: (movie_match, { eq }) =>
+              eq(movie_match.user_id, input.user_id),
+          },
+          movie_2: {
+            where: (movie_match, { eq }) =>
+              eq(movie_match.user_id, input.user_id),
+          },
+          genre_movie_elo: {
+            where: (genre_movie_elo, { eq }) =>
+              eq(genre_movie_elo.genre_id, input.genre_id),
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      const matches = await ctx.db.query.movie_match.findMany({
+        where: (movie_match, { eq }) => eq(movie_match.user_id, input.user_id),
+      });
+      movies = movies.sort((a, b) => {
+        const a_matches = a.movie_1.length + a.movie_2.length;
+        const a_skipped =
+          a.movie_1.filter((match) => match.result === 0).length +
+          a.movie_2.filter((match) => match.result === 0).length;
+        const b_skipped =
+          b.movie_1.filter((match) => match.result === 0).length +
+          b.movie_2.filter((match) => match.result === 0).length;
+        const avg_skipped = (a_skipped + b_skipped + 1) / 2;
+        if (
+          a_skipped !== b_skipped &&
+          avg_skipped > matches.length / 3 / movies.length
+        )
+          return a_skipped - b_skipped;
+        const b_matches = b.movie_1.length + b.movie_2.length;
+        if (a_matches === b_matches) {
+          const a_elo = a.genre_movie_elo[0]?.elo;
+          const b_elo = b.genre_movie_elo[0]?.elo;
+          if (typeof a_elo === "number" || typeof b_elo === "number") {
+            if (typeof a_elo === "number" && typeof b_elo !== "number")
+              return -1;
+            if (typeof a_elo !== "number" && typeof b_elo === "number")
+              return 1;
+            if (typeof a_elo === "number" && typeof b_elo === "number")
+              return Math.floor(b_elo / 15) * 15 - Math.floor(a_elo / 15) * 15;
+          }
+          if (a.release_date !== null && b.release_date !== null) {
+            const a_decade = a.release_date?.getFullYear();
+            const b_decade = b.release_date?.getFullYear();
+            return Math.floor(b_decade / 8) * 8 - Math.floor(a_decade / 8) * 8;
+          }
+        }
+        return a_matches - b_matches;
+      });
+      const movie_match: {
+        movie_1: {
+          id: string;
+          title: string | null;
+          budget: string | null;
+          release_date: Date | null;
+          poster_src: string | null;
+        };
+        movie_2: {
+          id: string;
+          title: string | null;
+          budget: string | null;
+          release_date: Date | null;
+          poster_src: string | null;
+        };
+      }[] = [];
+      // eslint-disable-next-line @typescript-eslint/prefer-for-of
+      for (let index = 0; index < movies.length; index++) {
+        const movie1 = movies[index];
+        if (movie1 === undefined) break;
+        if (
+          movie_match.find(
+            (match) =>
+              match.movie_1.id === movie1.id || match.movie_2.id === movie1.id,
+          ) !== undefined
+        )
+          continue;
+        let movie2:
+          | number
+          | {
+              id: string;
+              title: string | null;
+              budget: string | null;
+              release_date: Date | null;
+              poster_src: string | null;
+              movie_1: {
+                createdAt: Date;
+                user_id: string | null;
+                movie_1_id: string | null;
+                movie_2_id: string | null;
+                result: number | null;
+              }[];
+              movie_2: {
+                createdAt: Date;
+                user_id: string | null;
+                movie_1_id: string | null;
+                movie_2_id: string | null;
+                result: number | null;
+              }[];
+            } = 1;
+        let highest = 1;
+        while (typeof movie2 === "number") {
+          // eslint-disable-next-line @typescript-eslint/prefer-for-of
+          for (let i = 0; i < movies.length; i++) {
+            const temp = movies[i];
+            if (temp === undefined) continue;
+            if (
+              temp.id === movie1.id ||
+              movie_match.findIndex(
+                (match) =>
+                  match.movie_1.id === movie1.id ||
+                  match.movie_1.id === temp.id ||
+                  match.movie_2.id === movie1.id ||
+                  match.movie_2.id === temp.id,
+              ) !== -1
+            )
+              continue;
+            if (temp.movie_1.length === 0) {
+              movie2 = temp;
+              break;
+            }
+            const matches_movie_1 = temp.movie_1.reduce((count, current) => {
+              if (
+                current.movie_1_id === movie1.id ||
+                current.movie_2_id === movie1.id
+              )
+                return count + 1;
+              return count;
+            }, 0);
+            const matches = temp.movie_2.reduce((count, current) => {
+              if (
+                current.movie_1_id === movie1.id ||
+                current.movie_2_id === movie1.id
+              )
+                return count + 1;
+              return count;
+            }, matches_movie_1);
+            if (matches < movie2) {
+              movie2 = temp;
+              break;
+            }
+            if (matches > highest) highest = matches;
+            if (highest > 1 && matches === highest && highest === movie2) {
+              movie2 = temp;
+              break;
+            }
+          }
+          if (typeof movie2 === "number") movie2++;
+          else {
+            break;
+          }
+          if (movie2 > 30) break;
+        }
+        if (typeof movie2 === "number") continue;
+        movie_match.push({
+          movie_1: {
+            id: movie1.id,
+            title: movie1.title,
+            release_date: movie1.release_date,
+            poster_src: movie1.poster_src,
+            budget: movie1.budget,
+          },
+          movie_2: {
+            id: movie2.id,
+            title: movie2.title,
+            release_date: movie2.release_date,
+            poster_src: movie2.poster_src,
+            budget: movie2.budget,
+          },
+        });
+        if (movie_match.length > 25) break;
+      }
+      return movie_match;
+    }),
   rankMovie: protectedProcedure
     .input(
       z.object({
@@ -576,13 +766,13 @@ export const movieRouter = createTRPCRouter({
                     limit: 1,
                   },
                   genre_movie_user_elo: {
-                    where: (user_movie_elo, { eq, and }) =>
+                    where: (genre_movie_user_elo, { eq, and }) =>
                       and(
-                        eq(user_movie_elo.movie_id, input.movie_1),
-                        eq(user_movie_elo.user_id, input.user_id),
+                        eq(genre_movie_user_elo.movie_id, input.movie_1),
+                        eq(genre_movie_user_elo.user_id, input.user_id),
                       ),
-                    orderBy: (genre_movie_elo, { desc }) => [
-                      desc(genre_movie_elo.createdAt),
+                    orderBy: (genre_movie_user_elo, { desc }) => [
+                      desc(genre_movie_user_elo.createdAt),
                     ],
                     limit: 1,
                   },
@@ -632,28 +822,22 @@ export const movieRouter = createTRPCRouter({
           },
         },
       });
-      const movie_1_user_elo =
-        await ctx.db.query.genre_movie_user_elo.findFirst({
-          where: (user_movie_elo, { eq, and }) =>
-            and(
-              eq(user_movie_elo.user_id, input.user_id),
-              eq(user_movie_elo.movie_id, input.movie_1),
-            ),
-          orderBy: (user_movie_elo, { desc }) => [
-            desc(user_movie_elo.createdAt),
-          ],
-        });
-      const movie_2_user_elo =
-        await ctx.db.query.genre_movie_user_elo.findFirst({
-          where: (user_movie_elo, { eq, and }) =>
-            and(
-              eq(user_movie_elo.user_id, input.user_id),
-              eq(user_movie_elo.movie_id, input.movie_2),
-            ),
-          orderBy: (user_movie_elo, { desc }) => [
-            desc(user_movie_elo.createdAt),
-          ],
-        });
+      const movie_1_user_elo = await ctx.db.query.user_movie_elo.findFirst({
+        where: (user_movie_elo, { eq, and }) =>
+          and(
+            eq(user_movie_elo.user_id, input.user_id),
+            eq(user_movie_elo.movie_id, input.movie_1),
+          ),
+        orderBy: (user_movie_elo, { desc }) => [desc(user_movie_elo.createdAt)],
+      });
+      const movie_2_user_elo = await ctx.db.query.user_movie_elo.findFirst({
+        where: (user_movie_elo, { eq, and }) =>
+          and(
+            eq(user_movie_elo.user_id, input.user_id),
+            eq(user_movie_elo.movie_id, input.movie_2),
+          ),
+        orderBy: (user_movie_elo, { desc }) => [desc(user_movie_elo.createdAt)],
+      });
       if (movie_1 === undefined || movie_2 == undefined) return null;
 
       const probability = (rating1: number, rating2: number) =>
@@ -767,6 +951,201 @@ export const movieRouter = createTRPCRouter({
       console.log({
         movie1: movie_1.title + " Elo: " + new_movie_elo.Ra,
         movie2: movie_2.title + " Elo: " + new_movie_elo.Rb,
+      });
+      return new_movie_elo;
+    }),
+  rankGenreMovie: protectedProcedure
+    .input(
+      z.object({
+        user_id: z.string(),
+        genre_id: z.string(),
+        movie_1: z.string(),
+        movie_2: z.string(),
+        score: z.number(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.insert(movie_match).values({
+        movie_1_id: input.movie_1,
+        movie_2_id: input.movie_2,
+        result: input.score,
+        user_id: input.user_id,
+      });
+      if (input.score === 0) return null;
+      const movie_1 = await ctx.db.query.movies.findFirst({
+        where: (movies, { eq }) => eq(movies.id, input.movie_1),
+        with: {
+          genre_movie_elo: {
+            where: (user_movie_elo, { eq }) =>
+              eq(user_movie_elo.genre_id, input.genre_id),
+            orderBy: (genre_movie_elo, { desc }) => [
+              desc(genre_movie_elo.createdAt),
+            ],
+            limit: 1,
+          },
+          genre_movie_user_elo: {
+            where: (genre_movie_user_elo, { eq, and }) =>
+              and(
+                eq(genre_movie_user_elo.user_id, input.user_id),
+                eq(genre_movie_user_elo.genre_id, input.genre_id),
+              ),
+            orderBy: (genre_movie_elo, { desc }) => [
+              desc(genre_movie_elo.createdAt),
+            ],
+            limit: 1,
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      const movie_2 = await ctx.db.query.movies.findFirst({
+        where: (movies, { eq }) => eq(movies.id, input.movie_2),
+        with: {
+          genre_movie_elo: {
+            where: (user_movie_elo, { eq }) =>
+              eq(user_movie_elo.genre_id, input.genre_id),
+            orderBy: (genre_movie_elo, { desc }) => [
+              desc(genre_movie_elo.createdAt),
+            ],
+            limit: 1,
+          },
+          genre_movie_user_elo: {
+            where: (genre_movie_user_elo, { eq, and }) =>
+              and(
+                eq(genre_movie_user_elo.user_id, input.user_id),
+                eq(genre_movie_user_elo.genre_id, input.genre_id),
+              ),
+            orderBy: (genre_movie_elo, { desc }) => [
+              desc(genre_movie_elo.createdAt),
+            ],
+            limit: 1,
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
+          },
+        },
+      });
+      const movie_1_user_elo = await ctx.db.query.user_movie_elo.findFirst({
+        where: (user_movie_elo, { eq, and }) =>
+          and(
+            eq(user_movie_elo.user_id, input.user_id),
+            eq(user_movie_elo.movie_id, input.movie_1),
+          ),
+        orderBy: (user_movie_elo, { desc }) => [desc(user_movie_elo.createdAt)],
+      });
+      const movie_2_user_elo = await ctx.db.query.user_movie_elo.findFirst({
+        where: (user_movie_elo, { eq, and }) =>
+          and(
+            eq(user_movie_elo.user_id, input.user_id),
+            eq(user_movie_elo.movie_id, input.movie_2),
+          ),
+        orderBy: (user_movie_elo, { desc }) => [desc(user_movie_elo.createdAt)],
+      });
+      if (movie_1 === undefined || movie_2 == undefined) return null;
+
+      const probability = (rating1: number, rating2: number) =>
+        (1.0 * 1.0) /
+        (1 + 1.0 * Math.pow(10, (1.0 * (rating1 - rating2)) / 400));
+      const eloRating = (Ra: number, Rb: number, d: number, k = 30) => {
+        const Pb = probability(Ra, Rb);
+        const Pa = probability(Rb, Ra);
+        if (d == 1) {
+          return {
+            Ra: Math.round(Ra + k * (1 - Pa)),
+            Rb: Math.round(Rb + k * (0 - Pb)),
+          };
+        }
+        return {
+          Ra: Math.round(Ra + k * (0 - Pa)),
+          Rb: Math.round(Rb + k * (1 - Pb)),
+        };
+      };
+      //calculate movie elo
+      const movie_1_elo = movie_1?.movie_elo[0]?.elo ?? 1000;
+      const movie_2_elo = movie_2?.movie_elo[0]?.elo ?? 1000;
+      const new_movie_elo = eloRating(
+        movie_1_elo,
+        movie_2_elo,
+        input.score,
+        10,
+      );
+      await ctx.db.insert(movie_elo).values({
+        movie_id: movie_1.id,
+        elo: new_movie_elo.Ra,
+      });
+      await ctx.db.insert(movie_elo).values({
+        movie_id: movie_2.id,
+        elo: new_movie_elo.Rb,
+      });
+      //calculate user movie elo
+      const movie_1_user_movie_elo = movie_1_user_elo?.elo ?? 1000;
+      const movie_2_user_movie_elo = movie_2_user_elo?.elo ?? 1000;
+      const new_user_movie_elo = eloRating(
+        movie_1_user_movie_elo,
+        movie_2_user_movie_elo,
+        input.score,
+        10,
+      );
+      await ctx.db.insert(user_movie_elo).values({
+        movie_id: movie_1.id,
+        elo: new_user_movie_elo.Ra,
+        user_id: input.user_id,
+      });
+      await ctx.db.insert(user_movie_elo).values({
+        movie_id: movie_2.id,
+        elo: new_user_movie_elo.Rb,
+        user_id: input.user_id,
+      });
+      //calculate elo for genre
+      //calculate genre movie elo
+      const movie_1_genre_elo = movie_1.genre_movie_elo[0]?.elo ?? 1000;
+      const movie_2_genre_elo = movie_2.genre_movie_elo[0]?.elo ?? 1000;
+      const new_genre_movie_elo = eloRating(
+        movie_1_genre_elo,
+        movie_2_genre_elo,
+        input.score,
+        30,
+      );
+      await ctx.db.insert(genre_movie_elo).values({
+        movie_id: movie_1.id,
+        elo: new_genre_movie_elo.Ra,
+        genre_id: input.genre_id,
+      });
+      await ctx.db.insert(genre_movie_elo).values({
+        movie_id: movie_2.id,
+        elo: new_genre_movie_elo.Rb,
+        genre_id: input.genre_id,
+      });
+
+      //calculate user movie elo
+      const movie_1_genre_user_movie_elo =
+        movie_1.genre_movie_user_elo[0]?.elo ?? 1000;
+      const movie_2_genre_user_movie_elo =
+        movie_2.genre_movie_user_elo[0]?.elo ?? 1000;
+      const new_genre_movie_user_elo = eloRating(
+        movie_1_genre_user_movie_elo,
+        movie_2_genre_user_movie_elo,
+        input.score,
+        30,
+      );
+      await ctx.db.insert(genre_movie_user_elo).values({
+        movie_id: movie_1.id,
+        elo: new_genre_movie_user_elo.Ra,
+        user_id: input.user_id,
+        genre_id: input.genre_id,
+      });
+      await ctx.db.insert(genre_movie_user_elo).values({
+        movie_id: movie_2.id,
+        elo: new_genre_movie_user_elo.Rb,
+        user_id: input.user_id,
+        genre_id: input.genre_id,
+      });
+      console.log({
+        movie1: movie_1.title + " Elo: " + new_genre_movie_elo.Ra,
+        movie2: movie_2.title + " Elo: " + new_genre_movie_elo.Rb,
       });
       return new_movie_elo;
     }),
