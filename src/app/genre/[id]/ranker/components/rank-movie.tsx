@@ -62,9 +62,6 @@ export const RankMovie = ({ matches, user_id, genre }: RankMovieProps) => {
       }
       if (index === matches.length - 1) {
         await resetRank();
-      } else {
-        form.reset();
-        setIndex(index + 1);
       }
     },
   });
@@ -95,6 +92,10 @@ export const RankMovie = ({ matches, user_id, genre }: RankMovieProps) => {
       genre_id: genre.id,
       score: data.selected === movie_1 ? 1 : data.selected === movie_2 ? 2 : 0,
     });
+    if (index !== matches.length - 1) {
+      form.reset();
+      setIndex(index + 1);
+    }
   }
 
   return (
@@ -171,6 +172,10 @@ export const RankMovie = ({ matches, user_id, genre }: RankMovieProps) => {
                     genre_id: genre.id,
                     score: 0,
                   });
+                  if (index !== matches.length - 1) {
+                    form.reset();
+                    setIndex(index + 1);
+                  }
                 }}
               >
                 skip
