@@ -149,7 +149,7 @@ export const RankMovie = ({ matches, user_id, genre }: RankMovieProps) => {
             <div className="flex w-full items-center justify-center gap-6">
               <Button
                 disabled={
-                  insertMatch.isLoading ||
+                  (insertMatch.isLoading && index === matches.length - 1) ||
                   !(
                     form.getValues().selected === matches[index]?.movie_1.id ||
                     form.getValues().selected === matches[index]?.movie_2.id
@@ -163,7 +163,7 @@ export const RankMovie = ({ matches, user_id, genre }: RankMovieProps) => {
               <Button
                 variant="secondary"
                 type="button"
-                disabled={insertMatch.isLoading}
+                disabled={insertMatch.isLoading && index === matches.length - 1}
                 onClick={() => {
                   insertMatch.mutate({
                     movie_1: matches[index]!.movie_1.id,
