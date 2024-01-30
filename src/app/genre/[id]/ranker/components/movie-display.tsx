@@ -37,13 +37,13 @@ export default function MovieDisplay({ movie, selected }: movieProps) {
   };
   if (selected) {
     return (
-      <Card className="h-80 w-48 border-2 border-primary sm:h-96 sm:w-64 md:h-[30rem] md:w-80">
+      <Card className="h-80 w-40 border-2 border-primary sm:h-96 sm:w-64 md:h-[30rem] md:w-80">
         <MovieBody />
       </Card>
     );
   }
   return (
-    <Card className="h-80 w-48 sm:h-96 sm:w-64 md:h-[30rem] md:w-80">
+    <Card className="h-80 w-40 sm:h-96 sm:w-64 md:h-[30rem] md:w-80">
       <MovieBody />
     </Card>
   );

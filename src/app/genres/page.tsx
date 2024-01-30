@@ -13,7 +13,7 @@ export default async function Genres() {
   const genres = await api.movie.getMoviesGroupedGenreElo.query();
   if (genres.length === 0) return null;
   return (
-    <div className="m-10 flex w-full justify-center">
+    <div className="flex w-full justify-center">
       <div className="w-full max-w-7xl space-y-4 px-4">
         <div className="mt-2 grid gap-4 md:grid-cols-2 lg:grid-cols-4 ">
           {genres

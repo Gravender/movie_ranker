@@ -22,7 +22,7 @@ export default async function Home() {
     .map((movie) => movie?.movie_elo ?? 0)
     .filter((elo) => elo !== 0);
   return (
-    <div className="m-10 flex w-full justify-center">
+    <div className="flex w-full justify-center">
       <div className="w-full max-w-7xl space-y-4 px-4">
         <div className="flex h-24 flex-col items-center justify-center lg:px-0">
           <div className="">

@@ -57,7 +57,7 @@ const MovieCarousel = ({ movies, title }: movieCarouselProps) => {
           align: "start",
           loop: true,
         }}
-        className="mt-4 w-full max-w-xs sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl"
+        className="mt-4 w-4/6 max-w-xs sm:w-full sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-6xl"
       >
         <CarouselContent>
           {movies.map((movie) => (

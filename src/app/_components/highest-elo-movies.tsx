@@ -26,9 +26,9 @@ export function HighestEloMovies({ movies }: HighestEloMoviesProps) {
   return (
     <div className="space-y-8">
       {movies
-        ? movies.map((movie) => <MovieDisplay movie={movie} />)
-        : Array(10).map((_) => (
-            <div className="flex items-center">
+        ? movies.map((movie) => <MovieDisplay movie={movie} key={movie.id} />)
+        : Array(10).map((i) => (
+            <div className="flex items-center" key={i as number}>
               <div className="h-9 w-9">
                 <Skeleton className="flex h-full w-full items-center justify-center rounded-sm bg-muted" />
               </div>
