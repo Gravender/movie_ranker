@@ -207,6 +207,45 @@ export const movieRouter = createTRPCRouter({
       movie_elo: movie.movie_elo[0]?.elo,
     }));
   }),
+  getMoviesByUserElo: publicProcedure
+    .input(
+      z.object({
+        id: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const movies = await ctx.db.query.movies.findMany({
+        orderBy: (movies, { desc }) => [desc(movies.release_date)],
+        with: {
+          moviesToGenre: {
+            with: {
+              genre: true,
+            },
+          },
+          user_movie_elo: {
+            orderBy: (user_movie_elo, { desc }) => [
+              desc(user_movie_elo.createdAt),
+            ],
+            where: (user_movie_elo, { eq }) =>
+              eq(user_movie_elo.user_id, input.id),
+            limit: 1,
+          },
+        },
+      });
+      movies.sort((a, b) => {
+        const a_elo = a.user_movie_elo[0]?.elo;
+        const b_elo = b.user_movie_elo[0]?.elo;
+        if (typeof a_elo === "number" && typeof b_elo === "number")
+          return b_elo - a_elo;
+        if (typeof a_elo === "number") return -1;
+        if (typeof b_elo === "number") return 1;
+        return a.user_movie_elo.length - b.user_movie_elo.length;
+      });
+      return movies.map((movie) => ({
+        ...movie,
+        movie_elo: movie.user_movie_elo[0]?.elo,
+      }));
+    }),
   getGenreMoviesByElo: publicProcedure
     .input(
       z.object({
