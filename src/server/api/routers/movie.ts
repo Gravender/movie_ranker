@@ -987,7 +987,7 @@ export const movieRouter = createTRPCRouter({
             (movieToGenre) => movieToGenre.genre_id === genre.genre_id,
           )?.genre,
         }));
-      genres.map(async (genre) => {
+      await Promise.all(genres.map(async (genre) => {
         //calculate genre movie elo
         const movie_1_genre_elo = genre.movie_1.genre_movie_elo[0]?.elo ?? 1000;
         const movie_2_genre_elo =
@@ -1030,7 +1030,7 @@ export const movieRouter = createTRPCRouter({
           user_id: input.user_id,
           genre_id: genre.id,
         });
-      });
+      }));
       console.log({
         movie1: movie_1.title + " Elo: " + new_movie_elo.Ra,
         movie2: movie_2.title + " Elo: " + new_movie_elo.Rb,

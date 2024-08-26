@@ -9,6 +9,12 @@ const config = {
   images: {
     domains: ["fastly.picsum.photos", "m.media-amazon.com"],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default config;

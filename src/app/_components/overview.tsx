@@ -1,6 +1,7 @@
 "use client";
 
-import { Line, LineChart, ResponsiveContainer, XAxis } from "recharts";
+import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { z } from "zod";
 
 // Function to calculate the probability density function of a normal distribution
 function pdf(x: number, mean: number, stdDev: number) {
@@ -35,20 +36,75 @@ function calculateStandardDeviation(numbers: number[]) {
 }
 
 type OverviewType = {
-  data: number[];
+  data: number[] | { overall_elo: number; user_elo: number | undefined }[];
 };
 export function Overview({ data }: OverviewType) {
-  const mean = calculateMean(data);
-  const std = calculateStandardDeviation(data);
-
+  let eloCords:
+    | { x: number; "overall elo": number }[]
+    | { x: number; "overall elo": number; "user elo": number }[] = [];
+  const parseData = z.array(z.number()).safeParse(data);
+  if (parseData.success) {
+    const mean = calculateMean(parseData.data);
+    const std = calculateStandardDeviation(parseData.data);
+    eloCords = parseData.data.map((elo) => ({
+      x: elo,
+      "overall elo": pdf(elo, mean, std),
+    }));
+  } else {
+    const parseData = z
+      .array(
+        z.object({ overall_elo: z.number(), user_elo: z.number().optional() }),
+      )
+      .safeParse(data);
+    if (parseData.success) {
+      const userData = parseData.data
+        .map((cord) => {
+          return cord.user_elo ?? 0;
+        })
+        .filter((elo) => elo !== 0);
+      const overallData = parseData.data.map((cord) => {
+        return cord.overall_elo;
+      });
+      const userMean = calculateMean(userData);
+      const userStd = calculateStandardDeviation(userData);
+      const mean = calculateMean(overallData);
+      const std = calculateStandardDeviation(overallData);
+      eloCords = parseData.data.map((cord) => {
+        if (cord.user_elo) {
+          return {
+            x: cord.overall_elo,
+            "overall elo": pdf(cord.overall_elo, mean, std),
+           "user elo": pdf(cord.user_elo, userMean, userStd),
+          };
+        }
+        return {
+          x: cord.overall_elo,
+          "overall elo": pdf(cord.overall_elo, mean, std),
+        };
+      });
+    }
+  }
   return (
     <ResponsiveContainer width="100%" height={350}>
       <LineChart
-        data={data.map((elo) => ({ x: elo, y: pdf(elo, mean, std) }))}
+        data={eloCords}
         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
       >
         <XAxis dataKey="x" stroke="#888888" tickLine={false} axisLine={false} />
-        <Line type="monotone" dot={false} dataKey="y" stroke="#8884d8" />
+        <Line
+          type="monotone"
+          dot={false}
+          dataKey="overall elo"
+          stroke="#8884d8"
+        />
+        <Line
+          type="monotone"
+          dot={false}
+          dataKey="user elo"
+          stroke="#82ca9d"
+          strokeWidth={2}
+        />
+        <Legend />
       </LineChart>
     </ResponsiveContainer>
   );
