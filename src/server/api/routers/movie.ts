@@ -178,35 +178,79 @@ export const movieRouter = createTRPCRouter({
       },
     });
   }),
-  getMoviesByElo: publicProcedure.query(async ({ ctx }) => {
-    const movies = await ctx.db.query.movies.findMany({
-      orderBy: (movies, { desc }) => [desc(movies.release_date)],
-      with: {
-        moviesToGenre: {
-          with: {
-            genre: true,
+  getMoviesByElo: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const movies = await ctx.db.query.movies.findMany({
+        orderBy: (movies, { desc }) => [desc(movies.release_date)],
+        with: {
+          moviesToGenre: {
+            with: {
+              genre: true,
+            },
+          },
+          movie_elo: {
+            orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
+            limit: 1,
           },
         },
-        movie_elo: {
-          orderBy: (movie_elo, { desc }) => [desc(movie_elo.createdAt)],
-          limit: 1,
-        },
-      },
-    });
-    movies.sort((a, b) => {
-      const a_elo = a.movie_elo[0]?.elo;
-      const b_elo = b.movie_elo[0]?.elo;
-      if (typeof a_elo === "number" && typeof b_elo === "number")
-        return b_elo - a_elo;
-      if (typeof a_elo === "number") return -1;
-      if (typeof b_elo === "number") return 1;
-      return a.movie_elo.length - b.movie_elo.length;
-    });
-    return movies.map((movie) => ({
-      ...movie,
-      movie_elo: movie.movie_elo[0]?.elo,
-    }));
-  }),
+      });
+      if (input.id !== "") {
+        const user_movies = await ctx.db.query.movies.findMany({
+          orderBy: (movies, { desc }) => [desc(movies.release_date)],
+          with: {
+            user_movie_elo: {
+              orderBy: (user_movie_elo, { desc }) => [
+                desc(user_movie_elo.createdAt),
+              ],
+              where: (user_movie_elo, { eq }) =>
+                eq(user_movie_elo.user_id, input.id),
+              limit: 1,
+            },
+          },
+        });
+        const userMovie = movies.map((movie) => {
+          const user_movie = user_movies.find(
+            (u_movie) => u_movie.id === movie.id,
+          );
+          return {
+            ...movie,
+            user_movie_elo: user_movie?.user_movie_elo[0]?.elo,
+          };
+        });
+        userMovie.sort((a, b) => {
+          const a_elo = a.movie_elo[0]?.elo;
+          const b_elo = b.movie_elo[0]?.elo;
+          if (typeof a_elo === "number" && typeof b_elo === "number")
+            return b_elo - a_elo;
+          if (typeof a_elo === "number") return -1;
+          if (typeof b_elo === "number") return 1;
+          return a.movie_elo.length - b.movie_elo.length;
+        });
+        return userMovie.map((movie) => ({
+          ...movie,
+          movie_elo: movie.movie_elo[0]?.elo,
+        }));
+      }
+      movies.sort((a, b) => {
+        const a_elo = a.movie_elo[0]?.elo;
+        const b_elo = b.movie_elo[0]?.elo;
+        if (typeof a_elo === "number" && typeof b_elo === "number")
+          return b_elo - a_elo;
+        if (typeof a_elo === "number") return -1;
+        if (typeof b_elo === "number") return 1;
+        return a.movie_elo.length - b.movie_elo.length;
+      });
+      return movies.map((movie) => ({
+        ...movie,
+        movie_elo: movie.movie_elo[0]?.elo,
+        user_movie_elo: undefined,
+      }));
+    }),
   getMoviesByUserElo: publicProcedure
     .input(
       z.object({

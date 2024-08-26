@@ -14,13 +14,19 @@ import { Clapperboard } from "lucide-react";
 
 export default async function Home() {
   const session = await getServerAuthSession();
-  const movies = await api.movie.getMoviesByElo.query();
+  const movies = await api.movie.getMoviesByElo.query({
+    id: session?.user.id ?? "",
+  });
   const stats = await api.movie.movieStats.query({
     user_id: session ? session.user.id : undefined,
   });
+  console.log(movies);
   const eloData = movies
-    .map((movie) => movie?.movie_elo ?? 0)
-    .filter((elo) => elo !== 0);
+    .filter((movie) => movie?.movie_elo ?? 0 !== 0)
+    .map((movie) => ({
+      overall_elo: movie.movie_elo ?? 0,
+      user_elo: movie.user_movie_elo,
+    }));
   return (
     <div className="flex w-full justify-center">
       <div className="w-full max-w-7xl space-y-4 px-4">
