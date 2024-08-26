@@ -40,3 +40,5 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+/pscale_dump_general_main_20240826_172920
