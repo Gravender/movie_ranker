@@ -19,7 +19,7 @@ export default function MovieDisplay({ movie, selected }: movieProps) {
       <>
         <div className="relative h-52 w-full sm:h-4/5">
           {movie.poster_src !== null && movie.poster_src !== "N/A" ? (
-            <Image src={movie.poster_src} alt={movie.title ?? ""} fill />
+            <Image className="rounded-t-xl" src={movie.poster_src} alt={movie.title ?? ""} fill />
           ) : null}
         </div>
         <CardFooter>
